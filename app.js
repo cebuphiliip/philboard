@@ -511,16 +511,16 @@
 
   /* ---------- 자료실 ---------- */
   function libCard(x) {
-    var body = x.text || (x.title + "\n" + x.url);
-    return '<div class="lib"><div class="grow" style="min-width:0"><div class="nm">' + esc(x.title) + "</div>" + (x.url ? '<a class="note" href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.url) + "</a>" : '<div class="note pre">' + esc(x.text) + "</div>") + '</div><button class="btn sm gold" data-copytext="' + esc(body) + '">복사</button></div>';
+    var body = x.text || ("[" + x.title + "]\n" + (x.desc ? x.desc + "\n" : "") + "▶ " + x.url);
+    return '<div class="lib"><div class="grow" style="min-width:0"><div class="nm">' + esc(x.title) + "</div>" + (x.desc ? '<div class="note">' + esc(x.desc) + "</div>" : "") + (x.url ? '<a class="note" href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.url) + "</a>" : '<div class="note pre">' + esc(x.text) + "</div>") + '</div><button class="btn sm gold" data-copytext="' + esc(body) + '">복사</button></div>';
   }
   function viewLib() {
     var cats = [], q = state.libQ.trim().toLowerCase();
-    var all = D.library.concat(D.shops.filter(function (s) { return s.post; }).map(function (s) { return { cat: "업체 상세글", title: s.name, url: s.post }; }));
+    var all = D.library.concat(D.shops.filter(function (s) { return s.post; }).map(function (s) { return { cat: "업체 상세글", title: s.name, desc: s.tagline, url: s.post }; }));
     all.forEach(function (x) { if (cats.indexOf(x.cat) < 0) cats.push(x.cat); });
     var h = "<h1>상담 자료실</h1>" + '<input class="search" id="libQ" placeholder="자료 검색 (예: 풀빌라, 골프, 환불)" value="' + esc(state.libQ) + '">';
     if (q) {
-      var items = all.filter(function (x) { return (x.title + x.cat + (x.text || "")).toLowerCase().indexOf(q) >= 0; });
+      var items = all.filter(function (x) { return (x.title + x.cat + (x.desc || "") + (x.text || "")).toLowerCase().indexOf(q) >= 0; });
       return h + '<p class="note" style="margin:8px 2px">검색 결과 ' + items.length + "건</p>" + '<div class="card">' + (items.length ? items.map(libCard).join("") : '<div class="empty">자료가 없습니다.</div>') + "</div>";
     }
     h += '<p class="note" style="margin:8px 2px">분류를 누르면 펼쳐집니다. 다시 누르면 접힙니다.</p>';
