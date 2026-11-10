@@ -21,10 +21,11 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11a",
+    version: "2026-11-11b",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
+      usdRate: 1480, // 달러→원 환산 기본값(화면에서 고친다). 원화 입금은 현찰 살 때 환율 적용
       pesoRate: 23, // 페소→원 환산(클럽세부처럼 현장결제분을 원화로 미리 받는 곳에만 사용). 화면에서 수정 가능
       accounts: {
         krw: "케이뱅크 100126970158 (예금주 정봉규)",
@@ -379,8 +380,10 @@
         { key: "room_out", name: "룸온리+출국팩", pack: "out", room: true, times: ["예상 체크인 시간"] },
         { key: "in_room_out", name: "입국팩+룸온리+출국팩", pack: "inout", room: true, times: ["예상 체크아웃 시간(공항 출발)"] }
       ],
-      soltanaMaxNights: 6, soltanaRate: 1480, // 룸온리 최대 박수 / 달러→원 환산 기본값(화면에서 고친다)
-      soltanaAddAdult: 20, soltanaAddKid: 15, // 추가 1인당(달러). 성인·만 7세 이상 아동은 엑스트라베드+조식 포함, 만 7세 미만은 무료(엑스트라베드·조식 미포함)
+      soltanaMaxNights: 6, // 룸온리 최대 박수
+      /* 추가 인원 요금(달러, 1인). 입국팩: 성인 20·아동 15(조식+엑스트라베드 포함) / 룸온리: 성인 1박 15(엑스트라베드만, 조식은 박당 인당 6 추가), 아동 추가금 없음 / 출국팩: 성인 20(엑스트라베드만), 아동 추가금 없음 */
+      soltanaAdd: { in: { adult: 20, kid: 15 }, room: { adult: 15, kid: 0, breakfast: 6 }, out: { adult: 20, kid: 0 } },
+      soltanaMaxPax: 5, soltanaStdPax: 4, // 객실당 최대 인원(좁아도 괜찮다는 손님만 5명) / 기준 최대 인원
       soltanaNote: "커뮤니티 시설 확충으로 수영장 이용 불가",
       /* 솔레아처럼 숙박 조건에 따라 인당 붙는 의무 요금: match = TMJ 호텔 이름에 들어 있는 글자 */
       mandatory: [

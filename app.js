@@ -15,15 +15,15 @@
     get: function (k, d) { try { var v = localStorage.getItem("pb_" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem("pb_" + k, JSON.stringify(v)); } catch (e) { } }
   };
-  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, rate: "", addAdult: 0, addKid: 0, addBaby: 0, flight: "", pax: "", ename: "", t1: "", t2: "", note: "" } };
+  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" } };
   var state = {
     view: "home", shopId: null, q: "", cat: "전체", tab: "ask", libOpen: {}, libQ: "",
     cart: store.get("cart", []), cust: store.get("cust", { name: "", contact: "" }),
-    rate: store.get("rate2", S.pesoRate), bookings: store.get("bookings", []), tomb: store.get("tomb", []), edited: {},
+    rate: store.get("rate2", S.pesoRate), fx: store.get("fx", S.usdRate), bookings: store.get("bookings", []), tomb: store.get("tomb", []), edited: {},
     stay: (function () { var d = clone(stayDefault), v = store.get("stay3", {}); Object.keys(d).forEach(function (k) { if (v[k] != null) d[k] = typeof d[k] === "object" ? Object.assign(d[k], v[k]) : v[k]; }); return d; })(),
     led: { q: "", sort: "new", status: "전체", shop: "전체" }
   };
-  function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); }
+  function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("fx", state.fx); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); }
   function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "" }; }
 
   /* ---------- 요금 표기 ---------- */
@@ -43,6 +43,11 @@
   function nowStr(p) { var a = []; if (p.dep) a.push(won(p.dep)); if (p.pre) a.push(usd(p.pre)); return a.join(" + ") || "0원"; }
   function dateKo(v) { if (!v) return ""; var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); if (!m) return v; var d = new Date(+m[1], +m[2] - 1, +m[3]); return m[1] + "년 " + (+m[2]) + "월 " + (+m[3]) + "일(" + "일월화수목금토"[d.getDay()] + ")"; }
   function unitOf(it) { return it.unit || "명"; }
+  /* 달러 금액을 원화로 안내할 때 붙이는 글(현찰 살 때 환율) */
+  function fxKrw(n) { return Math.ceil(n * (+state.fx || S.usdRate) / 1000) * 1000; }
+  function fxLine(n) { return "→ 원화로 입금하실 경우: 약 " + won(fxKrw(n)) + " (1달러 = " + num(+state.fx || S.usdRate) + "원 기준)\n※ 원화 입금에는 입금하시는 날의 '현찰 살 때' 환율이 적용됩니다. 입금하실 때 정확한 금액을 다시 확인해 드립니다."; }
+  function fxInput() { return '<div><label>달러 → 원 환산(1달러당 원, 현찰 살 때 환율)</label><input id="fx" type="number" value="' + esc(state.fx) + '"></div>'; }
+  function showContact(shop) { return !!(state.cust.useContact || state.cust.contact || (shop && shop.needContact)); }
   /* 수익 표기: 원 + 페소 + 달러 (넷가가 다른 통화면 '− 1,200페소'처럼 뺄 금액으로 나온다) */
   function profitStr(k, p, u) {
     var a = []; [[k, won], [p, peso], [u, usd]].forEach(function (x) { if (x[0]) a.push((x[0] < 0 ? "− " : a.length ? "+ " : "") + x[1](Math.abs(x[0]))); });
@@ -95,7 +100,7 @@
       var t = "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n\n";
       t += state.cart.map(function (e) { return Text.intro(shopById(e.shopId)); }).join("\n\n");
       t += "\n\n정확한 견적과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n";
-      t += "대표자 성함: " + state.cust.name + "\n카카오톡 ID 또는 연락처: " + state.cust.contact + "\n";
+      t += "대표자 성함: " + state.cust.name + "\n" + (state.cart.some(function (e) { return showContact(shopById(e.shopId)); }) ? "카카오톡 ID 또는 연락처: " + state.cust.contact + "\n" : "");
       state.cart.forEach(function (e) {
         var shop = shopById(e.shopId), mas = shop.cat === "마사지";
         t += "\n■ " + shop.name + "\n이용 날짜: " + dateKo(e.date) + "\n";
@@ -127,6 +132,7 @@
         if (r.offKnown && r.lines.length) t += "  (참고: 업체 공식 요금은 " + priceStr(r.off) + "입니다.)\n";
       });
       t += "\n━━━━━━━━━━\n지금 입금하실 금액: " + won(c.payNow) + (c.pre ? " + " + usd(c.pre) : "") + "\n";
+      if (c.pre) t += fxLine(c.pre).replace("→ 원화로 입금하실 경우", "→ 달러분(" + usd(c.pre) + ")을 원화로 입금하실 경우") + "\n" + (c.payNow ? "→ 원화 합계: 약 " + won(c.payNow + fxKrw(c.pre)) + "\n" : "");
       if (c.on || c.usd) t += "현장에서 결제하실 금액: " + onsiteStr({ on: c.on, usd: c.usd }) + " (이용 당일 업체에 직접 결제)\n";
       t += "━━━━━━━━━━\n\n예약 가능 여부는 업체에 확인한 뒤 바로 알려 드리겠습니다.\n예약을 진행하시려면 아래 계좌로 입금하신 뒤 입금자 성함을 알려 주세요. 입금이 확인되면 예약을 확정해 드립니다.\n\n";
       t += "[한화 입금] " + S.accounts.krw + "\n[페소 입금] " + S.accounts.php.join(" / ") + "\n";
@@ -188,7 +194,8 @@
     },
     vendor: function (e) {
       var shop = shopById(e.shopId), f = D.forms[shop.form], r = Calc.entry(e);
-      return f.title.replace("{shop}", shop.name) + "\n" + f.lines.map(function (l) { return l[0] + ": " + Text.vendorValue(l[1], e, r); }).join("\n");
+      var sc = showContact(shop);
+      return f.title.replace("{shop}", shop.name) + "\n" + f.lines.filter(function (l) { return sc || (l[1] !== "contact" && l[1] !== "phone"); }).map(function (l) { return l[0].replace(sc ? "" : " & 연락처", "") + ": " + Text.vendorValue(l[1], e, r); }).join("\n");
     }
   };
 
@@ -240,7 +247,7 @@
         t += (d.length ? " (" + d.join(", ") + ")" : "") + "\n";
       });
       c.extras.forEach(function (x) { t += "· " + x.name + ": 성인 1인 " + m(x.adult) + (x.child ? " / 아동 1인 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : "") + (x.note ? " ※ " + x.note : "") + "\n"; });
-      if (!c.all && c.lines.length) t += "\n→ 합계 " + m(c.total) + "\n";
+      if (!c.all && c.lines.length) t += "\n→ 합계 " + m(c.total) + "\n" + (c.cur === "USD" ? fxLine(c.total) + "\n" : "");
       t += "\n※ 객실당 요금이며 조식이 포함되어 있습니다.\n" + (c.dated ? "" : "※ 성수기·연휴에는 추가 요금이 붙을 수 있어, 날짜가 정해지면 정확한 금액을 다시 안내해 드립니다.\n") + "※ " + D.priceDate + " 기준 요금이며, 예약을 진행할 때 정확한 금액을 한 번 더 확인해 드립니다.\n\n" + ST.resortSteps;
       return t;
     },
@@ -265,17 +272,27 @@
     villaText: function () {
       var v = state.stay.villa, c = Stay.villa();
       return "안녕하세요, " + B + "입니다. 문의하신 풀빌라 요금을 안내해 드립니다.\n\n■ " + c.d.name + " (" + c.d.rooms + ")\n" + (v.checkin ? "체크인 " + dateKo(v.checkin) + " · " : "") + c.nights + "박\n" +
-        "· 공식 요금(업체에 직접 예약하실 때): 1박 " + usd(c.direct) + "\n· " + B + " 스페셜: 1박 " + usd(c.sell) + (c.nights > 1 ? " × " + c.nights + "박 = " + usd(c.total) : "") + "\n\n" +
+        "· 공식 요금(업체에 직접 예약하실 때): 1박 " + usd(c.direct) + "\n· " + B + " 스페셜: 1박 " + usd(c.sell) + (c.nights > 1 ? " × " + c.nights + "박 = " + usd(c.total) : "") + "\n" + fxLine(c.total) + "\n\n" +
         "※ 빌라 한 채 전체 요금입니다(조식 불포함).\n※ " + D.priceDate + " 기준 요금이며, 날짜와 인원에 따라 달라질 수 있어 예약을 진행할 때 한 번 더 확인해 드립니다.\n\n예약을 원하시면 날짜와 인원(성인·아동 만 나이)을 알려 주세요. 예약 가능 여부를 확인한 뒤 바로 안내해 드리겠습니다.";
     },
     sol: function () {
-      var s = state.stay.sol, p = ST.soltana.filter(function (x) { return x.key === s.key; })[0] || ST.soltana[0], tier = ST.soltanaTiers.filter(function (x) { return x.key === s.tier; })[0] || ST.soltanaTiers[0], off = ST.soltanaTiers[0];
-      var rooms = Math.max(1, +s.rooms || 1), nights = p.room ? Math.min(ST.soltanaMaxNights, Math.max(1, +s.nights || 1)) : 0, aA = +s.addAdult || 0, aK = +s.addKid || 0, aB = +s.addBaby || 0;
+      var s = state.stay.sol, p = ST.soltana.filter(function (x) { return x.key === s.key; })[0] || ST.soltana[0], tier = ST.soltanaTiers.filter(function (x) { return x.key === s.tier; })[0] || ST.soltanaTiers[0], off = ST.soltanaTiers[0], A = ST.soltanaAdd;
+      var rooms = Math.max(1, +s.rooms || 1), nights = p.room ? Math.min(ST.soltanaMaxNights, Math.max(1, +s.nights || 1)) : 0, aA = +s.addAdult || 0, aK = +s.addKid || 0, aB = +s.addBaby || 0, bfPax = nights ? (+s.bfPax || 0) : 0;
+      var hasIn = p.pack === "in" || p.pack === "inout", hasOut = p.pack === "out" || p.pack === "inout";
       var one = function (t) { return (p.pack ? t.price[p.pack] : 0) + nights * t.price.room; };
-      var units = (p.pack ? 1 : 0) + nights, extra = (aA * ST.soltanaAddAdult + aK * ST.soltanaAddKid) * units, rate = s.rate === "" || s.rate == null ? ST.soltanaRate : +s.rate;
+      var ex = []; // 추가 요금 줄: [설명, 금액]
+      if (aA && hasIn) ex.push(["입국팩 성인 추가 " + aA + "명 × " + usd(A.in.adult) + " (조식·엑스트라베드 포함)", aA * A.in.adult]);
+      if (aK && hasIn) ex.push(["입국팩 아동 추가(만 7~11세) " + aK + "명 × " + usd(A.in.kid) + " (조식·엑스트라베드 포함)", aK * A.in.kid]);
+      if (aA && nights) ex.push(["룸온리 성인 추가 " + aA + "명 × " + usd(A.room.adult) + " × " + nights + "박 (엑스트라베드 포함, 조식 불포함)", aA * A.room.adult * nights]);
+      if (bfPax) ex.push(["룸온리 조식 추가 " + bfPax + "명 × " + usd(A.room.breakfast) + " × " + nights + "박", bfPax * A.room.breakfast * nights]);
+      if (aA && hasOut) ex.push(["출국팩 성인 추가 " + aA + "명 × " + usd(A.out.adult) + " (엑스트라베드 포함)", aA * A.out.adult]);
+      var extra = ex.reduce(function (a, x) { return a + x[1]; }, 0), total = +s.totalPax || 0, warn = [];
+      if (total > rooms * ST.soltanaMaxPax) warn.push("객실당 최대 " + ST.soltanaMaxPax + "명까지입니다. 총 " + total + "명이면 객실이 " + Math.ceil(total / ST.soltanaMaxPax) + "개 이상 필요합니다.");
+      else if (total > rooms * ST.soltanaStdPax) warn.push("객실 기준 인원은 최대 " + ST.soltanaStdPax + "명입니다. " + ST.soltanaMaxPax + "명은 손님이 좁아도 괜찮다고 할 때만 받습니다.");
       var parts = []; if (p.pack) parts.push(ST.soltana.filter(function (x) { return x.key === p.pack; })[0].name + " " + usd(tier.price[p.pack])); if (nights) parts.push("룸온리 " + nights + "박 × " + usd(tier.price.room));
-      var c = { p: p, tier: tier, price: one(tier), official: one(off), parts: parts.join(" + "), rooms: rooms, nights: nights, units: units, aA: aA, aK: aK, aB: aB, extra: extra, beds: Math.min(rooms, aA + aK), bf: aA + aK, room: one(tier) * rooms, rate: rate };
-      c.total = c.room + extra; c.krw = rate ? Math.ceil(c.total * rate / 1000) * 1000 : 0;
+      var c = { p: p, tier: tier, price: one(tier), official: one(off), parts: parts.join(" + "), rooms: rooms, nights: nights, hasIn: hasIn, hasOut: hasOut, aA: aA, aK: aK, aB: aB, bfPax: bfPax, ex: ex, extra: extra,
+        beds: Math.min(rooms, aA + (hasIn ? aK : 0)), freeKid: (aK && (nights || hasOut)) || aB, room: one(tier) * rooms, warn: warn, rate: +state.fx || S.usdRate };
+      c.total = c.room + extra; c.krw = fxKrw(c.total);
       return c;
     },
     solNote: function () { var s = state.stay.sol, c = Stay.sol(); return [ST.soltanaNote, c.beds ? "퀸사이즈 엑스트라베드 " + c.beds + "개 포함" : "", s.note].filter(Boolean).join(". "); },
@@ -286,19 +303,19 @@
       return "안녕하세요, 솔타나콘도텔입니다. 문의해 주셔서 감사합니다.\n예약을 도와드릴 수 있도록 아래 내용을 채워서 보내 주시기 바랍니다.\n\n" + L.map(function (l) { return l[0] + ": " + (l[1] || ""); }).join("\n");
     },
     solText: function () {
-      var s = state.stay.sol, c = Stay.sol(), per = c.rooms + "객실", un = c.units > 1 ? " × " + c.units + "(" + (c.p.pack ? "팩 1회 + " : "") + c.nights + "박)" : "";
+      var s = state.stay.sol, c = Stay.sol(), per = c.rooms + "객실";
       var t = "안녕하세요, 솔타나콘도텔입니다. 요청하신 내용으로 안내해 드립니다.\n\n■ " + c.p.name + (s.checkin ? " — " + dateKo(s.checkin) : "") + "\n";
       t += "· 구성(객실당): " + c.parts + (c.parts.indexOf("+") > 0 ? " = " + usd(c.price) : "") + "\n";
       if (c.price !== c.official) t += "· 공식 요금: 객실당 " + usd(c.official) + " → " + c.tier.name + " 적용 " + usd(c.price) + "\n";
       t += "· " + per + " × " + usd(c.price) + " = " + usd(c.room) + "\n";
-      if (c.aA) t += "· 성인 추가 " + c.aA + "명 × " + usd(ST.soltanaAddAdult) + un + " = " + usd(c.aA * ST.soltanaAddAdult * c.units) + " (조식 포함)\n";
-      if (c.aK) t += "· 만 7세 이상 아동 추가 " + c.aK + "명 × " + usd(ST.soltanaAddKid) + un + " = " + usd(c.aK * ST.soltanaAddKid * c.units) + " (조식 포함)\n";
+      c.ex.forEach(function (x) { t += "· " + x[0] + " = " + usd(x[1]) + "\n"; });
+      if (c.aK && (c.nights || c.hasOut)) t += "· 룸온리·출국팩은 만 11세 이하 아동 추가 요금이 없습니다.\n";
       if (c.aB) t += "· 만 7세 미만 아동 " + c.aB + "명: 무료 (엑스트라베드·조식 미포함)\n";
       if (c.beds) t += "· 퀸사이즈 엑스트라베드 " + c.beds + "개 포함\n";
-      t += "→ 합계 " + usd(c.total) + (c.krw ? "\n→ 원화로 입금하실 경우: " + won(c.krw) + " (1달러 = " + num(c.rate) + "원 기준)" : "") + "\n";
+      t += "→ 합계 " + usd(c.total) + "\n" + fxLine(c.total) + "\n";
       if (s.pax) t += "· 인원: " + s.pax + "\n";
       if (s.flight) t += "· 항공편: " + s.flight + "\n";
-      t += "\n※ " + ST.soltanaNote + "\n※ " + D.priceDate + " 기준 요금입니다. 원화 금액은 환율에 따라 달라질 수 있어, 입금하실 때 정확한 금액을 다시 확인해 드립니다.\n[한화 입금] " + S.accounts.krw + "\n\n예약이 확정되면 바우처를 보내 드리겠습니다. 감사합니다.";
+      t += "\n※ " + ST.soltanaNote + "\n※ " + D.priceDate + " 기준 요금입니다.\n[한화 입금] " + S.accounts.krw + "\n\n예약이 확정되면 바우처를 보내 드리겠습니다. 감사합니다.";
       return t;
     },
     /* 장부에 넣을 요약 */
@@ -322,32 +339,56 @@
     if ((m = /(?:^|\D)(\d{2})(\d{2})(\d{2})(?:\D|$)/.exec(s))) return "20" + m[1] + "-" + m[2] + "-" + m[3];
     return "";
   }
+  /* 손님 글에서 메뉴·수량 읽기: "아로마 90분 2명, 키즈 60분 1명" → 메뉴 이름의 낱말과 분(시간)이 맞는 품목에 수량을 넣는다 */
+  function parseMenu(shop, e, v) {
+    var hits = 0, sq = function (t) { return t.replace(/\s+/g, "").toLowerCase(); };
+    v.split(/[,，+\/]|그리고|\s및\s/).forEach(function (chunk) {
+      var c = sq(chunk); if (!c) return;
+      var mins = /(\d+)분/.exec(c), cnt = /(\d+)(?:명|인(?!\d)|대|건|매|장)/.exec(c.replace(/\d+~\d+인/g, "")), best = null, bs = 0;
+      shop.items.forEach(function (it) {
+        var im = /(\d+)분/.exec(it.label), base = it.label.replace(/\d+분/, "").replace(/\([^)]*\)/g, " ");
+        if (im && mins && im[1] !== mins[1]) return;
+        var toks = base.split(/[\s·\/~+]+/).filter(function (t) { return t.length >= 2; }), sc = 0;
+        toks.forEach(function (t) { if (c.indexOf(sq(t)) >= 0) sc += t.length; });
+        var paren = /\(([^)]*)\)/.exec(it.label); if (sc && paren && c.indexOf(sq(paren[1])) >= 0) sc += 3;
+        if (im && mins) sc += 1; if (im && !mins) sc -= 0.5;
+        if (sc > bs) { bs = sc; best = it; }
+      });
+      if (best && bs >= 2) { e.q[best.key] = cnt ? +cnt[1] : (e.q[best.key] || 1); hits++; }
+    });
+    return hits;
+  }
   function parsePaste(text) {
     var cur = null, hits = 0;
     text.split(/\r?\n/).forEach(function (line) {
       var head = /^\s*■\s*(.+)$/.exec(line);
-      if (head) { cur = state.cart.filter(function (e) { return head[1].indexOf(shopById(e.shopId).name) >= 0; })[0] || null; return; }
-      var m = /^([^:：]+)[:：]\s*(.*)$/.exec(line); if (!m) return;
+      if (head) { var hd = head[1].replace(/[(（].*$/, '').replace(/[—–-].*$/, '').replace(/ /g, ''); cur = state.cart.filter(function (e) { var nm = shopById(e.shopId).name, nb = nm.replace(/[(（].*$/, '').replace(/ /g, ''); return head[1].indexOf(nm) >= 0 || (hd.length >= 2 && (nb.indexOf(hd) >= 0 || hd.indexOf(nb) >= 0)); })[0] || null; return; }
+      var m = /^([^:：]+)[:：]\s*(.*)$/.exec(line);
+      if (!m) { if (line.trim()) (cur ? [cur] : state.cart).forEach(function (e) { var sh = shopById(e.shopId); if (sh.items.length > 5 || sh.cat === "마사지") hits += parseMenu(sh, e, line); }); return; }
       var k = m[1], v = m[2].trim(); if (!v) return;
       var targets = cur ? [cur] : state.cart;
       if (/성함|대표자|예약자(?! 전원)/.test(k) && !/영문/.test(k)) { state.cust.name = v; hits++; return; }
-      if (/카카오|카톡|연락처/.test(k)) { state.cust.contact = v; hits++; return; }
+      if (/카카오|카톡|연락처|전화|휴대폰/.test(k)) { state.cust.contact = v; hits++; return; }
       targets.forEach(function (e) {
         var shop = shopById(e.shopId);
         if (/날짜|일정/.test(k)) { var d = parseDate(v); if (d) { e.date = d; hits++; } }
         else if (/나이/.test(k)) { e.ages = v; hits++; }
         else if (/영문/.test(k)) { e.roster = v; hits++; }
-        else if (/인원/.test(k) && shop.cat !== "마사지") {
+        else if (/인원|코스|메뉴|마사지|상품|골프장|차량/.test(k) && (shop.items.length > 5 || shop.cat === "마사지")) { hits += parseMenu(shop, e, v); }
+        else if (/인원/.test(k)) {
           shop.items.forEach(function (it) {
             var word = it.key === "adult" ? "성인|입장권|어른" : it.key === "child" ? "아동|소인|아이|어린이" : it.key === "infant" ? "영아|유아" : it.label.replace(/\(.*\)/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             var mm = new RegExp("(?:" + word + ")[^\\d/+,]*?(\\d+)").exec(v.replace(/\([^)]*\)/g, "")); if (mm) { e.q[it.key] = +mm[1]; hits++; }
           });
+          var ag = /만\s*([\d,\s·세]+)/.exec(v); if (ag && !e.ages) e.ages = ag[1].replace(/세/g, "").trim();
         }
         else if (/시작/.test(k)) { e.start = v; hits++; }
         else if (/시간|선택/.test(k)) { e.time = v; hits++; }
         else if (/픽업/.test(k)) { e.pickup = v; hits++; }
         else if (/드랍|드롭/.test(k)) { e.drop = v; hits++; }
-        else if (/요청|특이/.test(k)) { e.note = v; hits++; }
+        else if (/요청|특이|기타|비고/.test(k)) { e.note = v; hits++; }
+        else if (/짐|캐리어/.test(k)) { e.luggage = /무|없|x|no/i.test(v) ? "무" : "유"; if (!/^(유|무|있음|없음)$/.test(v)) e.note = (e.note ? e.note + ". " : "") + "짐: " + v; hits++; }
+        else if (/항공|편명/.test(k)) { e.option = v; hits++; }
         else if (shop.optionLabel && k.indexOf(shop.optionLabel.replace(/\(.*\)/, "").trim()) >= 0) { e.option = v; hits++; }
       });
     });
@@ -416,7 +457,8 @@
   function viewQuote() {
     if (!state.cart.length) return '<div class="empty"><p>견적에 담긴 업체가 없습니다.</p><p class="note">업체 목록에서 [담기]를 누르면 여기에 들어옵니다. 한 번에 3곳까지 함께 견적을 낼 수 있습니다.</p><button class="btn gold" data-view="home">업체 고르기</button></div>';
     var c = Calc.cart(), nums = []; for (var n = 0; n <= 20; n++) nums.push(n);
-    var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div><div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div></div>' +
+    var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div>' + (state.cust.useContact || state.cust.contact || state.cart.some(function (e) { return shopById(e.shopId).needContact; }) ? '<div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div>' : "") + '</div>' +
+      '<label class="chk"><input type="checkbox" id="useContact"' + (state.cust.useContact ? " checked" : "") + '> 카카오톡 ID·연락처 칸 쓰기(업체가 손님께 직접 연락하는 곳 등 필요할 때만)</label>' +
       '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><button class="btn sm" id="doParse" style="margin-top:6px">내용 읽기</button></details></div>';
     state.cart.forEach(function (e, i) {
       var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지";
@@ -432,8 +474,9 @@
         (s.needContact && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
         '<p class="note" style="margin:8px 0 0">' + (r.noPrice ? "요금은 업체가 직접 안내합니다." : "예약 시 " + nowStr(r.sp) + (onsiteStr(r.sp) ? " · 현장결제 " + onsiteStr(r.sp) : "") + (s.prepayOnsite ? " (원화 사전결제 " + won(r.prepayKrw) + ")" : "")) + "</p></div>";
     });
+    if (c.pre) h += '<div class="card" style="margin-top:10px">' + fxInput() + "</div>";
     if (c.rows.some(function (r) { return r.shop.prepayOnsite; })) h += '<div class="card" style="margin-top:10px"><label>페소 → 원 환산(클럽세부 사전결제용, 1페소당 원)</label><input id="rate" type="number" step="0.1" value="' + state.rate + '"></div>';
-    h += '<div class="total" style="margin-top:12px"><small>손님이 지금 입금할 금액</small><div class="big">' + won(c.payNow) + (c.pre ? " + " + usd(c.pre) : "") + "</div><small>현장결제 합계 " + (onsiteStr({ on: c.on, usd: c.usd }) || "없음") + '</small></div>' +
+    h += '<div class="total" style="margin-top:12px"><small>손님이 지금 입금할 금액</small><div class="big">' + won(c.payNow) + (c.pre ? " + " + usd(c.pre) : "") + "</div>" + (c.pre ? "<small>달러분 원화 약 " + won(fxKrw(c.pre)) + " (현찰 살 때 환율 적용)</small>" : "") + "<small>현장결제 합계 " + (onsiteStr({ on: c.on, usd: c.usd }) || "없음") + '</small></div>' +
       '<div class="profit" style="margin-top:8px">예상 수익: ' + profitStr(c.profitKrw, c.profitPhp, c.profitUsd) + (c.unknown.length ? " · 수익 미계산: " + esc(c.unknown.join(", ")) : "") + " (손님·업체용 글에는 나가지 않습니다)</div>";
     var tabs = [["ask", "① 문의 답변"], ["quote", "② 견적·입금 안내"], ["done", "③ 입금 확인·완료"], ["vendor", "④ 업체 전달폼"]];
     h += '<div class="card" style="margin-top:12px"><div class="tabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (state.tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>";
@@ -452,7 +495,7 @@
   function viewStay() {
     var st = state.stay, tabs = [["resort", "리조트·호텔"], ["villa", "풀빌라"], ["sol", "솔타나"]];
     var h = "<h1>숙소 견적</h1>" + '<div class="tabs">' + tabs.map(function (t) { return '<button data-stab="' + t[0] + '" class="' + (st.tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" +
-      '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + "</div></div>";
+      '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div></div>";
     if (st.tab === "resort") {
       var r = st.resort, c = Stay.resort(), hh = c.h, regions = {}, m = function (n) { return Stay.money(n, c.cur); };
       H.hotels.forEach(function (x, i) { (regions[x.region] = regions[x.region] || []).push([i, x.name]); });
@@ -488,7 +531,7 @@
         '<div class="grid2" style="margin-top:10px">' + sInput(["villa", "checkin"], "체크인", "date") + sInput(["villa", "nights"], "박수", "number", ' min="1"') + sInput(["villa", "profit"], "1박 수익(달러, 기본 50·때로 40)", "number") + "</div>" +
         '<div class="scroll" style="margin-top:10px"><table><tr><th>구분</th><th>1박</th></tr><tr><td>넷가(내부)</td><td>' + usd(vc.d.net) + "</td></tr><tr><td>공식 요금(직세일)</td><td class=\"off\">" + usd(vc.direct) + '</td></tr><tr><td>손님가(' + B + ' 스페셜)</td><td class="sp">' + usd(vc.sell) + "</td></tr></table></div>" +
         (vc.d.note ? '<p class="note">' + esc(vc.d.note) + "</p>" : "") + "</div>" +
-        '<div class="total" style="margin-top:12px"><small>손님 견적 합계(' + vc.nights + '박)</small><div class="big">' + usd(vc.total) + "</div></div>" +
+        '<div class="total" style="margin-top:12px"><small>손님 견적 합계(' + vc.nights + '박)</small><div class="big">' + usd(vc.total) + "</div><small>원화 약 " + won(fxKrw(vc.total)) + " (현찰 살 때 환율 적용)</small></div>" +
         '<div class="profit" style="margin-top:8px">예상 수익 ' + usd(vc.profit) + " (손님 글에는 나가지 않습니다)</div>" +
         '<div class="card" style="margin-top:12px">' + outBox("stay_villa_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.villaAsk()) + outBox("stay_villa", "② 풀빌라 견적", Stay.villaText()) + "</div>";
     }
@@ -497,13 +540,15 @@
       h += '<div class="card" style="margin-top:10px"><h2>솔타나콘도텔</h2>' +
         '<div class="scroll"><table><tr><th>요금</th>' + [["in", "입국팩"], ["out", "출국팩"], ["inout", "입국팩+출국팩"], ["room", "룸온리 1박"]].map(function (x) { return "<th>" + x[1] + "</th>"; }).join("") + "</tr>" + ST.soltanaTiers.map(function (t) { return "<tr><td>" + (t.key === sc.tier.key ? "<b>" + t.name + " ✓</b>" : t.name) + "</td>" + [["in", "입국팩"], ["out", "출국팩"], ["inout", "입국팩+출국팩"], ["room", "룸온리 1박"]].map(function (x) { return '<td class="' + (t.key === sc.tier.key && (x[0] === sc.p.pack || (x[0] === "room" && sc.p.room)) ? "sp" : "off") + '">' + t.price[x[0]] + "</td>"; }).join("") + "</tr>"; }).join("") + '</table></div><p class="note">단위: 달러, 객실당(룸온리는 1박당). 기준 인원 성인 2 + 아동 2.</p>' +
         '<div class="grid2">' + sSelect(["sol", "tier"], "적용 요금", ST.soltanaTiers.map(function (t) { return [t.key, t.name]; })) + sSelect(["sol", "key"], "투숙 타입", ST.soltana.map(function (x) { return [x.key, x.name]; })) +
-        sInput(["sol", "checkin"], "체크인 날짜", "date") + sSelect(["sol", "rooms"], "객실 수", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return [n, n + "객실"]; })) + (sc.p.room ? sSelect(["sol", "nights"], "룸온리 박수", [1, 2, 3, 4, 5, 6].map(function (n) { return [n, n + "박"]; })) : "") + sInput(["sol", "rate"], "원화 환산(1달러당 원, 비우면 " + num(ST.soltanaRate) + ")", "number") +
-        sSelect(["sol", "addAdult"], "성인 추가(1인 " + ST.soltanaAddAdult + "달러, 엑베·조식 포함)", range(0, 10)) + sSelect(["sol", "addKid"], "만 7세 이상 아동 추가(1인 " + ST.soltanaAddKid + "달러, 엑베·조식 포함)", range(0, 10)) + sSelect(["sol", "addBaby"], "만 7세 미만 아동(무료, 엑베·조식 미포함)", range(0, 10)) +
+        sInput(["sol", "checkin"], "체크인 날짜", "date") + sSelect(["sol", "rooms"], "객실 수", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return [n, n + "객실"]; })) + (sc.p.room ? sSelect(["sol", "nights"], "룸온리 박수", [1, 2, 3, 4, 5, 6].map(function (n) { return [n, n + "박"]; })) : "") + 
+        sSelect(["sol", "addAdult"], "성인 추가(입국팩 20·룸온리 1박 15·출국팩 20달러)", range(0, 10)) + sSelect(["sol", "addKid"], "아동 추가 만 7~11세(입국팩만 15달러, 그 외 무료)", range(0, 10)) + sSelect(["sol", "addBaby"], "만 7세 미만 아동(무료, 엑베·조식 미포함)", range(0, 10)) +
+        (sc.p.room ? sSelect(["sol", "bfPax"], "룸온리 조식 추가(1인 1박 " + ST.soltanaAdd.room.breakfast + "달러)", range(0, 10)) : "") + sInput(["sol", "totalPax"], "총 인원(객실당 최대 " + ST.soltanaMaxPax + "명 확인용)", "number", ' min="1"') +
         sInput(["sol", "flight"], "이용 항공편명") + sInput(["sol", "pax"], "각 방 인원 구성(아동 만 나이)") + sInput(["sol", "ename"], "대표자 영문 성함") + sc.p.times.map(function (label, i) { return sInput(["sol", i ? "t2" : "t1"], label); }).join("") + "</div>" +
         '<div style="margin-top:10px"><label>특이사항(추가로 적을 내용)</label><input data-s="sol.note" value="' + esc(s.note) + '"></div>' +
         '<p class="note">특이사항에 자동으로 들어가는 글: ' + esc(Stay.solNote()) + "</p>" +
-        '<p class="note">엑스트라베드 ' + sc.beds + "개 포함(추가 인원 " + sc.bf + "명, 객실 " + sc.rooms + "개 — 엑스트라베드는 객실당 1개까지) · 조식 추가 " + sc.bf + "명</p></div>" +
-        '<div class="total" style="margin-top:12px"><small>합계 (' + sc.tier.name + ')</small><div class="big">' + usd(sc.total) + "</div><small>객실 " + usd(sc.room) + (sc.extra ? " + 추가 인원 " + usd(sc.extra) : "") + (sc.krw ? " · 원화 약 " + won(sc.krw) : "") + "</small></div>" +
+        (sc.warn.length ? '<p class="warn big">⚠ ' + sc.warn.map(esc).join("<br>⚠ ") + "</p>" : "") +
+        '<p class="note">엑스트라베드 ' + sc.beds + "개 포함(객실 " + sc.rooms + "개 — 엑스트라베드는 객실당 1개까지). 조식은 입국팩 추가 인원에만 포함되고, 룸온리는 조식 추가를 고른 인원만, 출국팩은 조식이 없습니다.</p></div>" +
+        '<div class="total" style="margin-top:12px"><small>합계 (' + sc.tier.name + ')</small><div class="big">' + usd(sc.total) + "</div><small>객실 " + usd(sc.room) + (sc.extra ? " + 추가 인원 " + usd(sc.extra) : "") + " · 원화 약 " + won(sc.krw) + " (현찰 살 때 환율 적용)</small></div>" +
         '<div class="card" style="margin-top:12px">' + outBox("sol_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.solAsk()) + outBox("sol_quote", "② 금액 안내", Stay.solText()) + "</div>";
     }
     return h + '<div class="row" style="margin-top:12px"><button class="btn gold grow" id="saveStay">이 숙소 견적을 장부에 저장</button></div>';
@@ -531,19 +576,33 @@
     return h + '<p class="note" style="margin-top:14px">넣을 글 주소나 문장을 알려 주시면 바로 추가하겠습니다.</p>';
   }
 
-  /* ---------- 장부 동기화(Supabase 로그인) ---------- */
-  var CFG = window.PB_CONFIG, sb = null, sync = { user: null, msg: "", busy: false, timer: 0 };
-  try { if (CFG && window.supabase) sb = window.supabase.createClient(CFG.url, CFG.key); } catch (e) { sb = null; }
+  /* ---------- 장부 동기화(Supabase 로그인) — 외부 라이브러리 없이 직접 통신 ---------- */
+  var CFG = window.PB_CONFIG, sb = !!(CFG && CFG.url && CFG.key && window.fetch), sess = store.get("sess", null), sync = { user: sess ? sess.user : null, msg: "", busy: false, timer: 0 };
+  function api(path, opt) {
+    opt = opt || {};
+    var h = { apikey: CFG.key, "Content-Type": "application/json" }; if (opt.auth && sess) h.Authorization = "Bearer " + sess.access_token; if (opt.prefer) h.Prefer = opt.prefer;
+    var ctl = window.AbortController ? new AbortController() : null, tm = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    return fetch(CFG.url + path, { method: opt.method || "GET", headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined, signal: ctl ? ctl.signal : undefined }).then(function (r) {
+      clearTimeout(tm);
+      return r.text().then(function (t) { var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { } if (!r.ok) { var er = new Error((j && (j.msg || j.error_description || j.message || j.error)) || ("오류 " + r.status)); er.status = r.status; throw er; } return j; });
+    }, function (e) { clearTimeout(tm); throw new Error(e && e.name === "AbortError" ? "응답이 없습니다(15초). 인터넷 연결을 확인하고 다시 눌러 주세요." : "연결 실패: " + (e.message || e)); });
+  }
+  function setSess(j) { if (j && j.access_token) { j.expires_at = j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600); sess = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at, user: { id: j.user.id, email: j.user.email } }; } else sess = null; store.set("sess", sess); sync.user = sess ? sess.user : null; }
+  function fresh() { // 로그인 유지: 만료가 가까우면 새로 받는다
+    if (!sess) return Promise.reject(new Error("로그인이 필요합니다."));
+    if (sess.expires_at * 1000 - Date.now() > 60000) return Promise.resolve();
+    return api("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: { refresh_token: sess.refresh_token } }).then(setSess, function (e) { if (e.status === 400 || e.status === 401) { setSess(null); if (state.view === "ledger") render(); } throw e; });
+  }
+  function koErr(m) { return /Invalid login/i.test(m) ? "이메일 또는 비밀번호가 맞지 않습니다." : /not confirmed/i.test(m) ? "아직 메일 확인이 안 됐습니다. 받은 메일의 링크를 누른 뒤 다시 로그인해 주세요." : /already registered/i.test(m) ? "이미 만든 계정입니다. [로그인]을 눌러 주세요." : /rate limit/i.test(m) ? "확인 메일을 너무 자주 요청했습니다. 한 시간쯤 뒤에 다시 해 주세요." : /at least/i.test(m) ? "비밀번호는 6자 이상이어야 합니다." : m; }
   function touch(x) { x.u = Date.now(); return x; }
   function syncSoon() { if (!sb || !sync.user) return; clearTimeout(sync.timer); sync.timer = setTimeout(doSync, 800); }
-  function syncMsg(m) { sync.msg = m; if (state.view === "ledger") { var el = $("#syncMsg"); if (el) el.textContent = m; } }
+  function syncMsg(m) { sync.msg = m; var el = $("#syncMsg"); if (el) el.textContent = m; }
   function doSync() {
     if (!sb || !sync.user || sync.busy) return Promise.resolve();
     sync.busy = true; syncMsg("동기화 중…");
-    return sb.from("pb_bookings").select("id,data").then(function (res) {
-      if (res.error) throw res.error;
+    return fresh().then(function () { return api("/rest/v1/pb_bookings?select=id,data", { auth: true }); }).then(function (rows) {
       var remote = {}, local = {}, ups = [], changed = 0;
-      res.data.forEach(function (r) { remote[r.id] = r.data; });
+      (rows || []).forEach(function (r) { remote[r.id] = r.data; });
       state.bookings.forEach(function (x) { local[x.id] = x; });
       state.tomb.forEach(function (x) { local[x.id] = { id: x.id, u: x.u, deleted: true }; });
       Object.keys(remote).forEach(function (id) {
@@ -559,17 +618,15 @@
       save();
       var done = function () { sync.busy = false; syncMsg("동기화 완료 " + new Date().toLocaleTimeString("ko-KR") + " · 받은 것 " + changed + "건, 올린 것 " + ups.length + "건"); if (changed && state.view === "ledger") render(); };
       if (!ups.length) return done();
-      return sb.from("pb_bookings").upsert(ups).then(function (r2) { if (r2.error) throw r2.error; done(); });
-    }).catch(function (e) { sync.busy = false; syncMsg("동기화 실패: " + (e.message || e)); });
+      return api("/rest/v1/pb_bookings?on_conflict=user_id,id", { method: "POST", auth: true, prefer: "resolution=merge-duplicates,return=minimal", body: ups }).then(done);
+    }).catch(function (e) { sync.busy = false; syncMsg("동기화 실패: " + koErr(e.message || String(e))); });
   }
   function syncBox() {
     if (!sb) return '<div class="card" style="margin-top:10px"><p class="note">기기 간 동기화를 쓸 수 없는 상태입니다(인터넷 연결 또는 설정 파일 확인). 장부는 이 기기에만 저장됩니다.</p></div>';
     if (!sync.user) return '<div class="card" style="margin-top:10px"><h2>폰·PC 장부 동기화</h2><p class="note">로그인하면 이 기기의 장부가 다른 기기와 합쳐집니다. 로그인하지 않으면 이 기기에만 저장됩니다.</p><div class="grid2"><div><label>이메일</label><input id="sbEmail" type="email" autocomplete="username"></div><div><label>비밀번호</label><input id="sbPw" type="password" autocomplete="current-password"></div></div><div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm gold" id="sbLogin">로그인</button><button class="btn sm ghost" id="sbSignup">처음이면 계정 만들기</button></div><p class="note" id="syncMsg">' + esc(sync.msg) + "</p></div>";
     return '<div class="card" style="margin-top:10px"><div class="row" style="flex-wrap:wrap"><div class="grow"><b>동기화 켜짐</b> <span class="note">' + esc(sync.user.email || "") + '</span></div><button class="btn sm" id="sbSync">지금 동기화</button><button class="btn sm ghost" id="sbLogout">로그아웃</button></div><p class="note" id="syncMsg" style="margin:6px 0 0">' + esc(sync.msg) + "</p></div>";
   }
-  if (sb) {
-    sb.auth.onAuthStateChange(function (ev, session) { var was = sync.user; sync.user = session ? session.user : null; if (sync.user && !was) setTimeout(doSync, 0); if (state.view === "ledger" && !!was !== !!sync.user) render(); });
-  }
+  if (sb && sync.user) setTimeout(doSync, 300);
 
   /* ---------- 장부 ---------- */
   var STATUS = { "견적": "견적만 보낸 상태(아직 입금 전)", "확정": "입금을 받고 업체에 예약을 넣은 상태", "완료": "손님이 이용을 마쳐 끝난 건" };
@@ -653,15 +710,15 @@
     if (d.open) { var bk = state.bookings.filter(function (x) { return x.id === d.open; })[0]; if (bk && bk.kind === "stay") { state.stay.tab = bk.stayTab; state.stay[bk.stayTab] = Object.assign(clone(stayDefault[bk.stayTab]), clone(bk.staySnap)); state.stay.cust = clone(bk.cust || { name: "", contact: "" }); state.edited = {}; save(); go("stay"); }
       else if (bk) { state.cart = clone(bk.cart).filter(function (e) { return shopById(e.shopId); }); state.cust = clone(bk.cust); state.edited = {}; save(); go("quote"); } return; }
     if (t.id === "sbLogin" || t.id === "sbSignup") {
-      var em = $("#sbEmail").value.trim(), pw = $("#sbPw").value; if (!em || !pw) return syncMsg("이메일과 비밀번호를 넣어 주세요.");
-      syncMsg(t.id === "sbLogin" ? "로그인 중…" : "계정 만드는 중…");
-      (t.id === "sbLogin" ? sb.auth.signInWithPassword({ email: em, password: pw }) : sb.auth.signUp({ email: em, password: pw })).then(function (r) {
-        if (r.error) return syncMsg((t.id === "sbLogin" ? "로그인 실패: " : "계정 만들기 실패: ") + r.error.message);
-        if (!r.data.session) return syncMsg("확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 여기서 로그인해 주세요.");
-      });
+      var em = $("#sbEmail").value.trim(), pw = $("#sbPw").value, login = t.id === "sbLogin"; if (!em || !pw) return syncMsg("이메일과 비밀번호를 넣어 주세요.");
+      syncMsg(login ? "로그인 중…" : "계정 만드는 중…");
+      api(login ? "/auth/v1/token?grant_type=password" : "/auth/v1/signup", { method: "POST", body: { email: em, password: pw } }).then(function (j) {
+        if (j && j.access_token) { setSess(j); sync.msg = ""; render(); return doSync(); }
+        syncMsg("확인 메일을 보냈습니다. 메일(스팸함 포함)의 링크를 누른 뒤, 여기서 [로그인]을 눌러 주세요.");
+      }).catch(function (e) { syncMsg((login ? "로그인 실패: " : "계정 만들기 실패: ") + koErr(e.message || String(e))); });
       return;
     }
-    if (t.id === "sbLogout") { sb.auth.signOut().then(function () { sync.msg = ""; render(); }); return; }
+    if (t.id === "sbLogout") { var tk = sess && sess.access_token; setSess(null); sync.msg = ""; render(); if (tk) fetch(CFG.url + "/auth/v1/logout", { method: "POST", headers: { apikey: CFG.key, Authorization: "Bearer " + tk } }).catch(function () { }); return; }
     if (t.id === "sbSync") { doSync(); return; }
     if (t.id === "exportBk") { var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(state.bookings, null, 1)], { type: "application/json" })); a.download = "philboard-backup-" + today() + ".json"; a.click(); }
   });
@@ -681,6 +738,8 @@
     if (d.q) { state.cart[+d.e].q[d.q] = +t.value; return refreshQuote(); }
     if (d.k || d.c) return refreshQuote();
     if (t.id === "rate") { state.rate = +t.value || S.pesoRate; return refreshQuote(); }
+    if (t.id === "fx") { state.fx = +t.value || S.usdRate; state.edited = {}; save(); return render(); }
+    if (t.id === "useContact") { state.cust.useContact = t.checked; if (!t.checked) state.cust.contact = ""; return refreshQuote(); }
     if (t.id === "hotelSel") { loadHotel(t.value); state.edited = {}; save(); return render(); }
     if (t.id === "ledSort") { state.led.sort = t.value; return render(); }
     if (t.id === "ledShop") { state.led.shop = t.value; return render(); }
