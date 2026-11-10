@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-10c",
+    version: "2026-11-11a",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
@@ -364,12 +364,17 @@
         { key: "promo", name: "프로모", price: { in: 50, out: 40, inout: 80, room: 50 } },
         { key: "double", name: "더블프로모", price: { in: 50, out: 40, inout: 70, room: 50 } }
       ],
+      /* pack = 요금표의 어느 팩 값을 쓰는지(in/out/inout), room = 룸온리 박수를 더하는지, times = 예약폼에 넣을 시간 칸 */
       soltana: [
-        { key: "in", name: "입국팩", times: ["예상 체크아웃 시간"] },
-        { key: "out", name: "출국팩", times: ["예상 체크인 시간"] },
-        { key: "inout", name: "입국팩+출국팩", times: ["입국팩 예상 체크아웃 시간", "출국팩 예상 체크인 시간"] },
-        { key: "room", name: "룸온리", nights: true, times: ["예상 체크인 시간", "예상 체크아웃 시간"] }
+        { key: "in", name: "입국팩", pack: "in", times: ["예상 체크아웃 시간"] },
+        { key: "out", name: "출국팩", pack: "out", times: ["예상 체크인 시간"] },
+        { key: "inout", name: "입국팩+출국팩", pack: "inout", times: ["입국팩 예상 체크아웃 시간", "출국팩 예상 체크인 시간"] },
+        { key: "room", name: "룸온리", room: true, times: ["예상 체크인 시간", "예상 체크아웃 시간"] },
+        { key: "in_room", name: "입국팩+룸온리", pack: "in", room: true, times: ["예상 체크아웃 시간"] },
+        { key: "room_out", name: "룸온리+출국팩", pack: "out", room: true, times: ["예상 체크인 시간"] },
+        { key: "in_room_out", name: "입국팩+룸온리+출국팩", pack: "inout", room: true, times: ["예상 체크아웃 시간(공항 출발)"] }
       ],
+      soltanaMaxNights: 6, soltanaRate: 1480, // 룸온리 최대 박수 / 달러→원 환산 기본값(화면에서 고친다)
       soltanaAddAdult: 20, soltanaAddKid: 15, // 추가 1인당(달러). 성인·만 7세 이상 아동은 엑스트라베드+조식 포함, 만 7세 미만은 무료(엑스트라베드·조식 미포함)
       soltanaNote: "커뮤니티 시설 확충으로 수영장 이용 불가",
       /* 솔레아처럼 숙박 조건에 따라 인당 붙는 의무 요금: match = TMJ 호텔 이름에 들어 있는 글자 */
