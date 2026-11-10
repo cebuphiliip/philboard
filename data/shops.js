@@ -167,16 +167,16 @@
           { key: "jetboat", label: "제트보트(1인)", off: null, sp: { dep: 10000, usd: 33 } },
           { key: "jetski", label: "제트스키(1대 15분)", unit: "대", off: null, sp: { dep: 10000, usd: 17 } }
         ] },
-      { id: "bigboss", name: "빅보스다이브(SSI 교육)", cat: "해양스포츠", form: "activity", after: "owner_relays", noNet: true,
+      { id: "bigboss", name: "빅보스다이브(SSI 교육)", cat: "해양스포츠", form: "activity", after: "owner_relays",
         tagline: "SSI 오픈워터·어드밴스 자격증 교육(각 2일). 빅보스 리조트 숙박을 추가하면 공항 픽업과 식사가 포함됩니다.",
         post: cat(1541),
-        memo: "예약금이 수익(예약금 액수 미입력 — 사장님 확인 필요, 그때까지 수익 계산 제외). 사장님이 손님께 연락한다. 예약 시 달러 완납. 만 10~15세 주니어 +50달러, 만 10세 미만 불가. 싱글차지 1박 30달러. 2026-10-28 기준.",
+        memo: "업체 세일가와 넷가의 차액은 과정당 30달러(오픈워터+어드밴스 60달러) — 그중 20달러(40달러)가 수익, 10달러(20달러)는 손님 할인. 숙박 추가는 수익 없음. 사장님이 손님께 연락한다. 예약 시 달러 완납. 만 10~15세 주니어 +50달러, 만 10세 미만 불가. 싱글차지 1박 30달러. 2026-10-28 기준.",
         items: [
-          { key: "ow", label: "오픈워터(2일)", off: { pre: 290 }, sp: { pre: 280 } },
-          { key: "adv", label: "어드밴스(2일)", off: { pre: 290 }, sp: { pre: 280 } },
-          { key: "owadv", label: "오픈워터+어드밴스", off: { pre: 570 }, sp: { pre: 550 } },
-          { key: "stay2", label: "숙박 추가 2박(1과정)", off: null, sp: { pre: 80 } },
-          { key: "stay4", label: "숙박 추가 4박(오픈+어드)", off: null, sp: { pre: 160 } }
+          { key: "ow", label: "오픈워터(2일)", off: { pre: 290 }, sp: { pre: 280 }, net: { pre: 260 } },
+          { key: "adv", label: "어드밴스(2일)", off: { pre: 290 }, sp: { pre: 280 }, net: { pre: 260 } },
+          { key: "owadv", label: "오픈워터+어드밴스", off: { pre: 570 }, sp: { pre: 550 }, net: { pre: 510 } },
+          { key: "stay2", label: "숙박 추가 2박(1과정)", off: null, sp: { pre: 80 }, net: { pre: 80 } },
+          { key: "stay4", label: "숙박 추가 4박(오픈+어드)", off: null, sp: { pre: 160 }, net: { pre: 160 } }
         ] },
       { id: "raum", name: "라움스파", cat: "마사지", form: "massage", after: "pickup_info",
         tagline: "전 객실 개별 화장실·샤워실을 갖춘 신축 프리미엄 스파. 마리바고에서 차로 3분 거리입니다.",

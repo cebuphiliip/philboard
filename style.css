@@ -80,7 +80,11 @@ textarea{min-height:120px;resize:vertical;font-size:14px;line-height:1.6}
 .lib{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--line)}
 .lib .nm{font-weight:700;font-size:14px}
 .card>.lib:first-child{border-top:0}
-.shop{min-width:0}
+.list{grid-template-columns:minmax(0,1fr)}
+.row{min-width:0}
+.row>.btn{flex:none}
+.shop{min-width:0;width:auto;overflow:hidden}
+.shop>div:first-child{overflow:hidden}
 main{overflow-x:hidden}
 a.note{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand small{letter-spacing:.04em}
