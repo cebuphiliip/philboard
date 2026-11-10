@@ -406,6 +406,13 @@
     if (opts) return "<div><label>" + label + "</label><select " + at + '><option value="">선택</option>' + opts.map(function (o) { return "<option" + (o === e[key] ? " selected" : "") + ">" + o + "</option>"; }).join("") + "</select></div>";
     return "<div><label>" + label + "</label><input " + at + (key === "pickup" || key === "drop" ? ' list="places"' : "") + ' type="' + (type || "text") + '" value="' + v + '"></div>';
   }
+  /* 메뉴가 많은 업체(6개 이상): 메뉴를 고르고 수량을 정해 [추가] — 고른 메뉴만 아래에 나온다 */
+  function menuPick(s, e, i) {
+    if (s.items.length <= 5) return "";
+    var any = s.items.some(function (it) { return e.q[it.key] > 0; }), qn = []; for (var n = 1; n <= 20; n++) qn.push(n);
+    return '<label>메뉴 고르기 → 수량 → [추가]</label><div class="pick"><select id="msel' + i + '">' + s.items.map(function (it) { return '<option value="' + it.key + '">' + esc(it.label + " · " + priceStr(it.sp).replace("예약금 ", "").replace(/현장결제 /g, "")) + "</option>"; }).join("") + '</select><select id="mqty' + i + '">' + qn.map(function (n) { return '<option value="' + n + '">' + n + "</option>"; }).join("") + '</select><button class="btn sm gold" data-madd="' + i + '">추가</button></div>' +
+      (any ? '<p class="note" style="margin:8px 0 2px">고른 메뉴 (수량을 0으로 바꾸면 빠집니다)</p>' : '<p class="note" style="margin:8px 0 0">아직 고른 메뉴가 없습니다.</p>');
+  }
   function viewQuote() {
     if (!state.cart.length) return '<div class="empty"><p>견적에 담긴 업체가 없습니다.</p><p class="note">업체 목록에서 [담기]를 누르면 여기에 들어옵니다. 한 번에 3곳까지 함께 견적을 낼 수 있습니다.</p><button class="btn gold" data-view="home">업체 고르기</button></div>';
     var c = Calc.cart(), nums = []; for (var n = 0; n <= 20; n++) nums.push(n);
@@ -416,7 +423,7 @@
       h += '<div class="card" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
         '<p class="note">★ 견적 필수: 날짜·인원' + (mas ? "·코스" : "") + ". 나머지는 예약 확정 때 채워도 됩니다.</p>" +
         '<div class="grid2">' + field(e, i, "date", "이용 날짜 ★", "date") + (mas ? (s.needStart ? field(e, i, "start", "마사지 시작 시간") : "") : (s.timeOptions ? field(e, i, "time", "선택", "", s.timeOptions) : field(e, i, "time", "시간(필요 시)"))) + "</div>" +
-        '<div style="margin:10px 0">' + s.items.map(function (it) {
+        '<div style="margin:10px 0">' + menuPick(s, e, i) + (s.items.length > 5 ? s.items.filter(function (it) { return e.q[it.key] > 0; }) : s.items).map(function (it) {
           return '<div class="qty"><span>' + esc(it.label) + "<small>" + priceStr(it.sp) + '</small></span><select data-e="' + i + '" data-q="' + it.key + '">' + nums.map(function (x) { return "<option" + (x === Number(e.q[it.key] || 0) ? " selected" : "") + ">" + x + "</option>"; }).join("") + "</select></div>";
         }).join("") + "</div>" +
         '<div class="grid2">' + (mas ? "" : field(e, i, "ages", "아동 만 나이")) + field(e, i, "pickup", "픽업 장소") + (mas ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"]) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + "</div>" +
@@ -617,6 +624,7 @@
     if (d.cat) { state.cat = d.cat; return render(); }
     if (d.libfold != null) { state.libOpen[d.libfold] = !state.libOpen[d.libfold]; return render(); }
     if (t.id === "addPick") { var rs = $("#roomSel"), pk = state.stay.resort.picks, ex = pk.filter(function (x) { return x.type === rs.value; })[0]; if (ex) ex.rooms = +$("#roomQty").value; else pk.push({ type: rs.value, rooms: +$("#roomQty").value }); state.edited = {}; save(); return render(); }
+    if (d.madd != null) { state.cart[+d.madd].q[$("#msel" + d.madd).value] = +$("#mqty" + d.madd).value; return refreshQuote(); }
     if (d.pdel != null) { state.stay.resort.picks.splice(+d.pdel, 1); state.edited = {}; save(); return render(); }
     if (t.id === "saveStay") {
       var sb = Stay.booking(), tab = state.stay.tab;
