@@ -19,11 +19,11 @@
   var state = {
     view: "home", shopId: null, q: "", cat: "전체", tab: "ask", libOpen: {}, libQ: "",
     cart: store.get("cart", []), cust: store.get("cust", { name: "", contact: "" }),
-    rate: store.get("rate2", S.pesoRate), fx: store.get("fx", S.usdRate), bookings: store.get("bookings", []), tomb: store.get("tomb", []), edited: {},
+    rate: store.get("rate2", S.pesoRate), fx: store.get("fx2", S.usdRate), fxInfo: store.get("fxInfo", { manual: false, mid: 0, date: "" }), bookings: store.get("bookings", []), tomb: store.get("tomb", []), edited: {},
     stay: (function () { var d = clone(stayDefault), v = store.get("stay3", {}); Object.keys(d).forEach(function (k) { if (v[k] != null) d[k] = typeof d[k] === "object" ? Object.assign(d[k], v[k]) : v[k]; }); return d; })(),
     led: { q: "", sort: "new", status: "전체", shop: "전체" }
   };
-  function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("fx", state.fx); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); }
+  function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("fx2", state.fx); store.set("fxInfo", state.fxInfo); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); }
   function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "" }; }
 
   /* ---------- 요금 표기 ---------- */
@@ -46,7 +46,19 @@
   /* 달러 금액을 원화로 안내할 때 붙이는 글(현찰 살 때 환율) */
   function fxKrw(n) { return Math.ceil(n * (+state.fx || S.usdRate) / 1000) * 1000; }
   function fxLine(n) { return "→ 원화로 입금하실 경우: 약 " + won(fxKrw(n)) + " (1달러 = " + num(+state.fx || S.usdRate) + "원 기준)\n※ 원화 입금에는 입금하시는 날의 '현찰 살 때' 환율이 적용됩니다. 입금하실 때 정확한 금액을 다시 확인해 드립니다."; }
-  function fxInput() { return '<div><label>달러 → 원 환산(1달러당 원, 현찰 살 때 환율)</label><input id="fx" type="number" value="' + esc(state.fx) + '"></div>'; }
+  function fxInput() {
+    var f = state.fxInfo, why = f.manual ? "직접 넣은 값" : f.mid ? "자동: " + f.date + " 기준환율 " + num(Math.round(f.mid)) + "원 + 현찰 살 때 가산 " + (S.usdSpread * 100) + "% (은행 고시와 몇 원 다를 수 있음)" : "자동 환율을 아직 못 받아 기본값 사용";
+    return '<div><label>달러 → 원 환산(1달러당 원, 현찰 살 때 환율)</label><input id="fx" type="number" value="' + esc(state.fx) + '"><small class="note" style="display:block;margin-top:4px">' + esc(why) + (f.manual ? ' <button class="btn sm ghost" id="fxAuto">자동 환율로</button>' : "") + "</small></div>";
+  }
+  /* 하루 한 번 기준환율을 받아 '현찰 살 때' 환율(기준환율 × 1.0175)을 기본값으로 채운다. 직접 넣은 값이 있으면 건드리지 않는다 */
+  function fxFetch(force) {
+    var f = state.fxInfo; if (!force && f.date === today() && f.mid) return;
+    fetch("https://open.er-api.com/v6/latest/USD").then(function (r) { return r.json(); }).then(function (j) {
+      var mid = j && j.rates && j.rates.KRW; if (!mid) return;
+      f.mid = mid; f.date = today(); if (!f.manual) state.fx = Math.ceil(mid * (1 + S.usdSpread)); state.edited = {}; save();
+      if (state.view === "stay" || state.view === "quote") { var a = document.activeElement; if (!a || a === document.body || a.tagName === "BUTTON") render(); }
+    }).catch(function () { });
+  }
   function showContact(shop) { return !!(state.cust.useContact || state.cust.contact || (shop && shop.needContact)); }
   /* 수익 표기: 원 + 페소 + 달러 (넷가가 다른 통화면 '− 1,200페소'처럼 뺄 금액으로 나온다) */
   function profitStr(k, p, u) {
@@ -459,7 +471,7 @@
     var c = Calc.cart(), nums = []; for (var n = 0; n <= 20; n++) nums.push(n);
     var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div>' + (state.cust.useContact || state.cust.contact || state.cart.some(function (e) { return shopById(e.shopId).needContact; }) ? '<div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div>' : "") + '</div>' +
       '<label class="chk"><input type="checkbox" id="useContact"' + (state.cust.useContact ? " checked" : "") + '> 카카오톡 ID·연락처 칸 쓰기(업체가 손님께 직접 연락하는 곳 등 필요할 때만)</label>' +
-      '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><button class="btn sm" id="doParse" style="margin-top:6px">내용 읽기</button></details></div>';
+      '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button><button class="btn sm gold" id="doAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다.</p></details></div>';
     state.cart.forEach(function (e, i) {
       var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지";
       h += '<div class="card" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
@@ -581,11 +593,11 @@
   function api(path, opt) {
     opt = opt || {};
     var h = { apikey: CFG.key, "Content-Type": "application/json" }; if (opt.auth && sess) h.Authorization = "Bearer " + sess.access_token; if (opt.prefer) h.Prefer = opt.prefer;
-    var ctl = window.AbortController ? new AbortController() : null, tm = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    var lim = opt.timeout || 15000, ctl = window.AbortController ? new AbortController() : null, tm = setTimeout(function () { if (ctl) ctl.abort(); }, lim);
     return fetch(CFG.url + path, { method: opt.method || "GET", headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined, signal: ctl ? ctl.signal : undefined }).then(function (r) {
       clearTimeout(tm);
       return r.text().then(function (t) { var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { } if (!r.ok) { var er = new Error((j && (j.msg || j.error_description || j.message || j.error)) || ("오류 " + r.status)); er.status = r.status; throw er; } return j; });
-    }, function (e) { clearTimeout(tm); throw new Error(e && e.name === "AbortError" ? "응답이 없습니다(15초). 인터넷 연결을 확인하고 다시 눌러 주세요." : "연결 실패: " + (e.message || e)); });
+    }, function (e) { clearTimeout(tm); throw new Error(e && e.name === "AbortError" ? "응답이 없습니다(" + Math.round(lim / 1000) + "초). 인터넷 연결을 확인하고 다시 눌러 주세요." : "연결 실패: " + (e.message || e)); });
   }
   function setSess(j) { if (j && j.access_token) { j.expires_at = j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600); sess = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at, user: { id: j.user.id, email: j.user.email } }; } else sess = null; store.set("sess", sess); sync.user = sess ? sess.user : null; }
   function fresh() { // 로그인 유지: 만료가 가까우면 새로 받는다
@@ -593,7 +605,7 @@
     if (sess.expires_at * 1000 - Date.now() > 60000) return Promise.resolve();
     return api("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: { refresh_token: sess.refresh_token } }).then(setSess, function (e) { if (e.status === 400 || e.status === 401) { setSess(null); if (state.view === "ledger") render(); } throw e; });
   }
-  function koErr(m) { return /Invalid login/i.test(m) ? "이메일 또는 비밀번호가 맞지 않습니다." : /not confirmed/i.test(m) ? "아직 메일 확인이 안 됐습니다. 받은 메일의 링크를 누른 뒤 다시 로그인해 주세요." : /already registered/i.test(m) ? "이미 만든 계정입니다. [로그인]을 눌러 주세요." : /rate limit/i.test(m) ? "확인 메일을 너무 자주 요청했습니다. 한 시간쯤 뒤에 다시 해 주세요." : /at least/i.test(m) ? "비밀번호는 6자 이상이어야 합니다." : m; }
+  function koErr(m) { return /Invalid login/i.test(m) ? "이메일 또는 비밀번호가 맞지 않습니다." : /not confirmed/i.test(m) ? "아직 메일 확인이 안 됐습니다. 받은 메일의 링크를 누른 뒤 다시 로그인해 주세요." : /already registered/i.test(m) ? "이미 만든 계정입니다. [로그인]을 눌러 주세요." : /rate limit/i.test(m) ? "확인 메일을 너무 자주 요청했습니다. 한 시간쯤 뒤에 다시 해 주세요." : /at least/i.test(m) ? "비밀번호는 6자 이상이어야 합니다." : /not authorized|sending.*email|confirmation email/i.test(m) ? "계정은 접수됐지만 확인 메일을 보내지 못했습니다. 클실장에게 '계정 만들었어'라고 알려 주시면 바로 승인해 드립니다. (" + m + ")" : m; }
   function touch(x) { x.u = Date.now(); return x; }
   function syncSoon() { if (!sb || !sync.user) return; clearTimeout(sync.timer); sync.timer = setTimeout(doSync, 800); }
   function syncMsg(m) { sync.msg = m; var el = $("#syncMsg"); if (el) el.textContent = m; }
@@ -681,6 +693,7 @@
     if (d.cat) { state.cat = d.cat; return render(); }
     if (d.libfold != null) { state.libOpen[d.libfold] = !state.libOpen[d.libfold]; return render(); }
     if (t.id === "addPick") { var rs = $("#roomSel"), pk = state.stay.resort.picks, ex = pk.filter(function (x) { return x.type === rs.value; })[0]; if (ex) ex.rooms = +$("#roomQty").value; else pk.push({ type: rs.value, rooms: +$("#roomQty").value }); state.edited = {}; save(); return render(); }
+    if (t.id === "fxAuto") { state.fxInfo.manual = false; if (state.fxInfo.mid) state.fx = Math.ceil(state.fxInfo.mid * (1 + S.usdSpread)); save(); render(); return fxFetch(true); }
     if (d.madd != null) { state.cart[+d.madd].q[$("#msel" + d.madd).value] = +$("#mqty" + d.madd).value; return refreshQuote(); }
     if (d.pdel != null) { state.stay.resort.picks.splice(+d.pdel, 1); state.edited = {}; save(); return render(); }
     if (t.id === "saveStay") {
@@ -699,6 +712,25 @@
     if (t.id === "addRow") { state.stay.resort.rows.push({ type: "", tmj: "", rooms: 1 }); save(); return render(); }
     if (d.rdel != null) { state.stay.resort.rows.splice(+d.rdel, 1); state.edited = {}; save(); return render(); }
     if (t.id === "doParse") { var n = parsePaste($("#paste").value); refreshQuote(); return toast(n ? n + "개 항목을 읽었습니다" : "읽을 수 있는 항목이 없습니다"); }
+    if (t.id === "doAi") {
+      var txt = $("#paste").value, am = function (m) { var el = $("#aiMsg"); if (el) el.textContent = m; };
+      if (!txt.trim()) return am("손님 글을 먼저 붙여넣어 주세요.");
+      if (!sb || !sess) return am("AI로 읽기는 로그인한 뒤에 쓸 수 있습니다. [장부] 화면에서 로그인해 주세요.");
+      am("AI가 읽는 중… (10~40초)");
+      var shopsIn = state.cart.map(function (e) { var s = shopById(e.shopId); return { id: s.id, name: s.name, cat: s.cat, needStart: !!s.needStart, timeOptions: s.timeOptions || [], optionLabel: s.optionLabel || "", items: s.items.map(function (it) { return { key: it.key, label: it.label }; }) }; });
+      fresh().then(function () { return api("/functions/v1/pb-parse", { method: "POST", auth: true, timeout: 90000, body: { text: txt, shops: shopsIn, today: today() } }); }).then(function (j) {
+        var r = j && j.result, n = 0; if (!r) throw new Error((j && j.error) || "결과가 비어 있습니다.");
+        if (r.name) { state.cust.name = r.name; n++; } if (r.contact) { state.cust.contact = r.contact; n++; }
+        (r.entries || []).forEach(function (x) {
+          var e = state.cart.filter(function (c) { return c.shopId === x.shopId; })[0]; if (!e) return; var shop = shopById(e.shopId);
+          ["date", "time", "start", "ages", "pickup", "drop", "luggage", "option", "roster", "note"].forEach(function (k) { if (x[k] && (k !== "date" || /^\d{4}-\d{2}-\d{2}$/.test(x[k]))) { e[k] = x[k]; n++; } });
+          (x.items || []).forEach(function (it) { if (it.qty > 0 && shop.items.some(function (s2) { return s2.key === it.key; })) { e.q[it.key] = it.qty; n++; } });
+        });
+        refreshQuote(); toast("AI가 " + n + "개 항목을 채웠습니다");
+        am("AI가 " + n + "개 항목을 채웠습니다. 빈 칸과 금액을 한 번 확인해 주세요." + (j.usage ? " (사용량: 입력 " + num(j.usage.input) + " · 출력 " + num(j.usage.output) + " 토큰)" : ""));
+      }).catch(function (e) { am("AI 읽기 실패: " + koErr(e.message || String(e))); });
+      return;
+    }
     if (t.id === "clearCart") { if (confirm("작성 중인 견적을 비울까요?")) { state.cart = []; state.cust = { name: "", contact: "" }; state.edited = {}; save(); go("home"); } return; }
     if (t.id === "saveBooking") {
       var c = Calc.cart(), dates = state.cart.map(function (e) { return e.date; }).filter(Boolean).sort();
@@ -714,7 +746,7 @@
       syncMsg(login ? "로그인 중…" : "계정 만드는 중…");
       api(login ? "/auth/v1/token?grant_type=password" : "/auth/v1/signup", { method: "POST", body: { email: em, password: pw } }).then(function (j) {
         if (j && j.access_token) { setSess(j); sync.msg = ""; render(); return doSync(); }
-        syncMsg("확인 메일을 보냈습니다. 메일(스팸함 포함)의 링크를 누른 뒤, 여기서 [로그인]을 눌러 주세요.");
+        syncMsg("계정이 접수됐습니다. 확인 메일(스팸함 포함)의 링크를 누르거나, 메일이 안 오면 클실장에게 '계정 만들었어'라고 알려 주세요. 승인 뒤 [로그인]을 누르시면 됩니다.");
       }).catch(function (e) { syncMsg((login ? "로그인 실패: " : "계정 만들기 실패: ") + koErr(e.message || String(e))); });
       return;
     }
@@ -738,7 +770,7 @@
     if (d.q) { state.cart[+d.e].q[d.q] = +t.value; return refreshQuote(); }
     if (d.k || d.c) return refreshQuote();
     if (t.id === "rate") { state.rate = +t.value || S.pesoRate; return refreshQuote(); }
-    if (t.id === "fx") { state.fx = +t.value || S.usdRate; state.edited = {}; save(); return render(); }
+    if (t.id === "fx") { state.fx = +t.value || S.usdRate; state.fxInfo.manual = true; state.edited = {}; save(); return render(); }
     if (t.id === "useContact") { state.cust.useContact = t.checked; if (!t.checked) state.cust.contact = ""; return refreshQuote(); }
     if (t.id === "hotelSel") { loadHotel(t.value); state.edited = {}; save(); return render(); }
     if (t.id === "ledSort") { state.led.sort = t.value; return render(); }
@@ -749,6 +781,8 @@
   state.cart = state.cart.filter(function (e) { return shopById(e.shopId); });
   (function () { var td = today(), ch = 0; state.bookings.forEach(function (x) { var d = x.lastDate || x.firstDate; if (x.status === "확정" && d && d < td) { x.status = "완료"; x.auto = true; touch(x); ch++; } }); if (ch) save(); })();
   var dl = document.createElement("datalist"); dl.id = "places"; dl.innerHTML = (S.places || []).map(function (p) { return '<option value="' + esc(p) + '">'; }).join(""); document.body.appendChild(dl);
+  var verEl = $("#ver"); if (verEl) verEl.textContent = "필보드 버전 " + (window.PB_BUILD === "dev" ? "개발용(이 PC)" : window.PB_BUILD) + " · 요금 자료 " + D.version;
+  fxFetch();
   window.PB = { Calc: Calc, Text: Text, Stay: Stay, state: state, parsePaste: parsePaste };
   render();
 })();

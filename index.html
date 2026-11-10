@@ -5,13 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#14213D">
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="필보드">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>필보드</title>
-<link rel="stylesheet" href="style.css?v=1794327810">
+<script>
+/* 파일을 부를 때마다 번호를 붙여, 브라우저가 옛 파일을 다시 쓰지 않게 한다. 배포할 때 deploy.sh 가 "dev" 를 배포 번호로 바꾼다 */
+var PB_BUILD = "1111-0044", PB_V = PB_BUILD === "dev" ? Date.now() : PB_BUILD;
+document.write('<link rel="stylesheet" href="style.css?v=' + PB_V + '">');
+</script>
 </head>
 <body>
 <header class="top">
@@ -25,11 +30,11 @@
   </nav>
 </header>
 <main id="app"></main>
+<p id="ver" class="note" style="text-align:center;margin:0 0 24px"></p>
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="config.js?v=1794327810"></script>
-<script src="data/shops.js?v=1794327810"></script>
-<script src="data/hotels.js?v=1794327810"></script>
-<script src="app.js?v=1794327810"></script>
-<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");</script>
+<script>
+["config.js", "data/shops.js", "data/hotels.js", "app.js"].forEach(function (f) { document.write('<script src="' + f + '?v=' + PB_V + '"><\/script>'); });
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
+</script>
 </body>
 </html>
