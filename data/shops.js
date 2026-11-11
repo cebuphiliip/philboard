@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11b",
+    version: "2026-11-11c",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
@@ -50,6 +50,7 @@
       massage: { title: "{shop}", lines: [["마사지날짜", "date"], ["대표자성함", "name"], ["인원(마사지종류&시간)", "courses"], ["픽업장소(픽업시간)", "pickup+time"], ["드랍장소", "drop"], ["특이사항", "pay+note"]] },
       oceanspa: { title: "오션스파", lines: [["A.예약자명 & 인원", "name+total"], ["B.예약날짜 & 마사지시작시간", "date+start"], ["C.픽업장소 & 시간", "pickup+time/"], ["D.드랍장소 & 시간", "drop+after"], ["E.마사지종류 및 시간&네일서비스종류", "courses"], ["F.기타요청사항", "pay+note"]] },
       acecrab: { title: "에이스크랩 예약안내(본점)", lines: [["예약자분 성함", "name"], ["인원(성인+아이)", "paxline"], ["예약 날짜", "date"], ["픽업시간", "time"], ["픽업장소", "pickup"], ["드랍장소", "drop"], ["메뉴", "option"], ["요청사항", "note"]] },
+      biwon: { title: "비원레스토랑 예약안내", lines: [["예약자분 성함", "name"], ["이용 날짜", "date"], ["이용 시간", "time"], ["인원(성인+아동)", "paxline"], ["요청사항", "note"]] },
       show: { title: "어메이징쇼", lines: [["공연날짜", "date+time"], ["대표자성함", "name"], ["인원", "paxline"], ["특이사항&결제금액", "showpay+note"]] },
       lokal: { title: "로컬페이지 양식입니다!", lines: [["대표자분성함", "name"], ["휴대폰번호", "phone"], ["총인원", "total+pax"], ["영문이름·생년월일(전원)", "roster"], ["투어종류", "option"], ["투어날짜", "date"], ["픽업장소", "pickup"], ["드랍장소", "drop"], ["조인/단독", "time"], ["비고", "note"]] },
       airport: { title: "공항픽업 예약(놀러와)", lines: [["픽업날짜", "date"], ["항공편명", "option"], ["도착시간", "time"], ["대표자", "name"], ["연락처/카카오톡ID", "contact"], ["차량", "courses"], ["드랍장소", "drop"], ["인원·캐리어·기타", "note"]] },
@@ -326,6 +327,15 @@
           { key: "big", label: "대가족스냅(2시간)", unit: "건", off: null, sp: { pre: 100, usd: 250 } },
           { key: "remind", label: "부모님 리마인드웨딩(2시간)", unit: "건", off: null, sp: { pre: 100, usd: 350 } },
           { key: "honey", label: "허니문스냅(1시간)", unit: "건", off: null, sp: { pre: 100, usd: 100 } }
+        ] },
+      { id: "biwon", name: "비원레스토랑", cat: "식당·공연·촬영", form: "biwon", noNet: true,
+        afterText: "★ 비원레스토랑 예약이 완료되었습니다.\n이용 당일 식당에서 세트메뉴 금액(성인 800페소·소아 400페소)을 현장에서 결제해 주세요.",
+        tagline: "메뉴 고민 없이 인기 메뉴로 구성한 추천 세트메뉴입니다. 1인 800페소(현장결제), 만 2~11세 소아는 50% 할인된 400페소입니다.\n① 갈릭 라이스(마늘 향 볶음밥)\n② 씨푸드 에그 드랍 스프(해산물과 달걀을 풀어 넣은 따뜻한 국물)\n③ 칠리 갈릭 버터 쉬림프(새우 요리)\n④ 판싯 귀사도(필리핀식 볶음국수)\n⑤ 모닝글로리 볶음(공심채 나물 볶음)\n⑥ 그릴 포크 벨리(구운 삼겹살)",
+        post: cat(1301),
+        memo: "세트메뉴만 받는다. 1인 800페소(현장결제), 만 2~11세 소아 50% 할인(400페소). 세트 구성 6가지: ①갈릭 라이스(마늘 향 볶음밥) ②씨푸드 에그 드랍 스프(해산물과 달걀을 풀어 넣은 따뜻한 국물) ③칠리 갈릭 버터 쉬림프(새우 요리) ④판싯 귀사도(필리핀식 볶음국수) ⑤모닝글로리 볶음(공심채 나물 볶음) ⑥그릴 포크 벨리(구운 삼겹살). 세트 사진은 업체 제공(첨부). 넷가·수익은 아직 받은 값이 없다.",
+        items: [
+          { key: "adult", label: "성인(세트메뉴 1인)", off: null, sp: P(0, 800) },
+          { key: "child", label: "소아(만 2~11세, 50% 할인)", off: null, sp: P(0, 400) }
         ] },
       { id: "show", name: "어메이징쇼", cat: "식당·공연·촬영", form: "show", timeOptions: ["1부쇼", "2부쇼"],
         afterText: "★ 어메이징쇼 예약이 완료되었습니다.\n티켓은 이용하실 솔타나 객실 안 테이블 위에 올려 두고, 미리 사진을 찍어 보내 드리겠습니다.",
