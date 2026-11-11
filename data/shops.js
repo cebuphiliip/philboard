@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11d",
+    version: "2026-11-11e",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
@@ -328,14 +328,14 @@
           { key: "remind", label: "부모님 리마인드웨딩(2시간)", unit: "건", off: null, sp: { pre: 100, usd: 350 } },
           { key: "honey", label: "허니문스냅(1시간)", unit: "건", off: null, sp: { pre: 100, usd: 100 } }
         ] },
-      { id: "biwon", name: "비원레스토랑", cat: "식당·공연·촬영", form: "biwon", noNet: true, prepayOnsite: true,
+      { id: "biwon", name: "비원레스토랑", cat: "식당·공연·촬영", form: "biwon", noNet: true, prepayOnsite: true, allPrepay: true,
         afterText: "★ 비원레스토랑 예약이 완료되었습니다.\n세트메뉴 금액은 전액 사전결제로 확인되었으며, 이용 당일 식당에서는 따로 결제하지 않으셔도 됩니다.",
         tagline: "메뉴 고민 없이 인기 메뉴로 구성한 추천 세트메뉴입니다. 1인 800페소, 만 2~11세 소아는 50% 할인된 400페소이며, 세트메뉴 금액 전액을 예약 시 미리 결제하셔야 합니다.\n① 갈릭 라이스(마늘 향 볶음밥)\n② 씨푸드 에그 드랍 스프(해산물과 달걀을 풀어 넣은 따뜻한 국물)\n③ 칠리 갈릭 버터 쉬림프(새우 요리)\n④ 판싯 귀사도(필리핀식 볶음국수)\n⑤ 모닝글로리 볶음(공심채 나물 볶음)\n⑥ 그릴 포크 벨리(구운 삼겹살)",
         post: cat(1301),
         memo: "세트메뉴만 받는다. 1인 800페소, 만 2~11세 소아 50% 할인(400페소). 전액 사전결제(페소 금액을 원화로 환산해 예약 시 받는다, 1페소=23원·입금 때 재확인). 세트 구성 6가지: ①갈릭 라이스(마늘 향 볶음밥) ②씨푸드 에그 드랍 스프(해산물과 달걀을 풀어 넣은 따뜻한 국물) ③칠리 갈릭 버터 쉬림프(새우 요리) ④판싯 귀사도(필리핀식 볶음국수) ⑤모닝글로리 볶음(공심채 나물 볶음) ⑥그릴 포크 벨리(구운 삼겹살). 세트 사진은 업체 제공(첨부). 넷가·수익은 아직 받은 값이 없다.",
         items: [
-          { key: "adult", label: "성인(세트메뉴 1인)", off: null, sp: P(0, 800) },
-          { key: "child", label: "소아(만 2~11세, 50% 할인)", off: null, sp: P(0, 400) }
+          { key: "adult", label: "성인(세트메뉴 1인)", off: null, sp: { dep: 0, on: 800, allPre: true } },
+          { key: "child", label: "소아(만 2~11세, 50% 할인)", off: null, sp: { dep: 0, on: 400, allPre: true } }
         ] },
       { id: "show", name: "어메이징쇼", cat: "식당·공연·촬영", form: "show", timeOptions: ["1부쇼", "2부쇼"],
         afterText: "★ 어메이징쇼 예약이 완료되었습니다.\n티켓은 이용하실 솔타나 객실 안 테이블 위에 올려 두고, 미리 사진을 찍어 보내 드리겠습니다.",

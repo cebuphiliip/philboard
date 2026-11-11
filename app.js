@@ -35,7 +35,7 @@
     var a = [], onsite = p.on || p.usd;
     if (p.pre) a.push("예약 시 " + usd(p.pre));
     if (p.dep) a.push((onsite ? "예약금 " : "") + won(p.dep));
-    if (p.on) a.push("현장결제 " + peso(p.on));
+    if (p.on) a.push((p.allPre ? "예약 시 결제 " : "현장결제 ") + peso(p.on));
     if (p.usd) a.push("현장결제 " + usd(p.usd));
     return a.length ? a.join(" + ") : "무료";
   }
@@ -139,7 +139,8 @@
         t += "\n■ " + r.shop.name + (e.date ? " — " + dateKo(e.date) : "") + (e.time ? (mas ? " (픽업 " + e.time + ")" : " " + e.time) : "") + "\n";
         r.lines.forEach(function (l) { t += "· " + l.it.label + " " + l.n + unitOf(l.it) + (l.it.sp ? " × (" + priceStr(l.it.sp) + ")" : "") + "\n"; });
         if (r.noPrice) { t += "→ 요금은 업체에서 상품·인원에 맞춰 직접 안내해 드립니다.\n"; return; }
-        if (r.shop.prepayOnsite) t += "→ 예약 시 결제: " + won(r.payNow) + " (예약금 " + won(r.sp.dep) + " + 현장결제분 " + peso(r.sp.on) + " 원화 환산 " + won(r.prepayKrw) + ", 1페소 = " + state.rate + "원 기준)\n  ※ 환율에 따라 달라질 수 있어, 입금하실 때 정확한 금액을 다시 확인해 드립니다.\n";
+        if (r.shop.allPrepay) t += "→ 예약 시 전액 결제: " + won(r.payNow) + " (" + peso(r.sp.on) + " 원화 환산, 1페소 = " + state.rate + "원 기준)\n  ※ 환율에 따라 달라질 수 있어, 입금하실 때 정확한 금액을 다시 확인해 드립니다.\n";
+        else if (r.shop.prepayOnsite) t += "→ 예약 시 결제: " + won(r.payNow) + " (예약금 " + won(r.sp.dep) + " + 현장결제분 " + peso(r.sp.on) + " 원화 환산 " + won(r.prepayKrw) + ", 1페소 = " + state.rate + "원 기준)\n  ※ 환율에 따라 달라질 수 있어, 입금하실 때 정확한 금액을 다시 확인해 드립니다.\n";
         else t += "→ " + (r.sp.dep || r.sp.pre ? "예약 시 결제 " + nowStr(r.sp) : "예약금 없음") + (onsiteStr(r.sp) ? " / 현장결제 " + onsiteStr(r.sp) : "") + "\n";
         if (r.offKnown && r.lines.length) t += "  (참고: 업체 공식 요금은 " + priceStr(r.off) + "입니다.)\n";
       });
@@ -484,7 +485,7 @@
         (s.form === "clubcebu" || s.form === "lokal" ? '<div style="margin-top:10px"><label>예약자 전원 영문이름·생년월일' + (s.form === "clubcebu" ? "·성별" : "") + '</label><textarea data-e="' + i + '" data-k="roster" style="min-height:70px">' + esc(e.roster) + "</textarea></div>" : "") +
         '<div style="margin-top:10px"><label>특이사항(직접 입력)</label><textarea data-e="' + i + '" data-k="note" style="min-height:60px">' + esc(e.note) + "</textarea></div>" +
         (s.needContact && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
-        '<p class="note" style="margin:8px 0 0">' + (r.noPrice ? "요금은 업체가 직접 안내합니다." : "예약 시 " + nowStr(r.sp) + (onsiteStr(r.sp) ? " · 현장결제 " + onsiteStr(r.sp) : "") + (s.prepayOnsite ? " (원화 사전결제 " + won(r.prepayKrw) + ")" : "")) + "</p></div>";
+        '<p class="note" style="margin:8px 0 0">' + (r.noPrice ? "요금은 업체가 직접 안내합니다." : "예약 시 " + nowStr(r.sp) + (onsiteStr(r.sp) ? (s.allPrepay ? " · 예약 시 결제 " : " · 현장결제 ") + onsiteStr(r.sp) : "") + (s.prepayOnsite ? " (원화 사전결제 " + won(r.prepayKrw) + ")" : "")) + "</p></div>";
     });
     if (c.pre) h += '<div class="card" style="margin-top:10px">' + fxInput() + "</div>";
     if (c.rows.some(function (r) { return r.shop.prepayOnsite; })) h += '<div class="card" style="margin-top:10px"><label>페소 → 원 환산(클럽세부 사전결제용, 1페소당 원)</label><input id="rate" type="number" step="0.1" value="' + state.rate + '"></div>';
