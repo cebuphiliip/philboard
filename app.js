@@ -251,7 +251,7 @@
       }
       if (h) (ST.mandatory || []).forEach(function (m) { if (h.name.indexOf(m.match) >= 0 && nights >= m.minNights) m.items.forEach(function (it) { var kc = it.ageLo != null ? cnt(it.ageLo, it.ageHi) : kids; extras.push({ name: it.name, adult: it.adult, child: it.child, total: (adults * it.adult + kc * it.child) * (m.perNight ? nights : 1), note: m.note }); }); });
       var pk = h && r.picks && r.picks[0] ? h.rooms.filter(function (x) { return x.type === r.picks[0].type; })[0] : null, ebn = Math.max(0, +r.ebn || 0);
-      var checks = [];
+      var checks = []; if (r.reqNote) infos.push("손님 요청사항: " + r.reqNote);
       if (ageUnknown) checks.push("아동 나이가 입력되지 않았습니다 — 갈라·의무식·아동 조식은 아동 나이로 대상이 갈립니다. 지금은 아동 전원 대상으로 계산했으니 나이를 넣어 확인하세요.");
       if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) checks.push(x.note); });
       if (h && extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; })) {
@@ -316,7 +316,8 @@
       return "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n정확한 요금과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n" +
         ["숙소: " + (r.name || ""), "체크인 날짜: " + dateKo(r.checkin), "체크아웃 날짜(또는 박수): " + (r.checkin ? dateKo(addDays(r.checkin, c.nights)) + " (" + c.nights + "박)" : ""),
           "객실 타입: " + (picked ? c.lines.map(function (x) { return x.type; }).join(", ") : ""), "객실 수: " + (picked ? c.lines.map(function (x) { return x.rooms + "객실"; }).join(", ") : ""),
-          "인원(성인 / 아동은 만 나이): " + (r.checkin || picked ? "성인 " + c.adults + "명" + (c.kids ? " / 아동 " + c.kids + "명(만 나이: )" : "") : ""),
+          "인원(성인 / 아동): " + (r.checkin || picked ? "성인 " + c.adults + "명" + (c.kids ? " / 아동 " + c.kids + "명" : "") : ""),
+          "아동 나이(만 나이, 아동별로 · 없으면 '없음'): " + (r.kidAges ? r.kidAges.split(/[^0-9]+/).filter(Boolean).map(function (n) { return n + "세"; }).join(", ") : ""),
           "대표자 영문 성함(여권과 동일): ", "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "요청 사항(침대 타입·공항 픽업 등): "].join("\n");
     },
     villaAsk: function () {
@@ -417,6 +418,71 @@
       if (best && bs >= 2) { e.q[best.key] = cnt ? +cnt[1] : (e.q[best.key] || 1); hits++; }
     });
     return hits;
+  }
+  /* ---- 숙소 견적: 손님이 채워 보낸 글 읽기 (양식 읽기 + AI 읽기가 같은 적용 함수를 쓴다) ---- */
+  var HOTEL_ALIAS = [["샹그릴라", "SHANGRILA MACTAN"], ["제이파크", "JPARK ISLAND RESORT (MIN. 2N)"], ["jpark", "JPARK ISLAND RESORT (MIN. 2N)"], ["솔레아", "SOLEA MACTAN"], ["뫼벤픽", "MOVENPICK HOTEL"], ["모벤픽", "MOVENPICK HOTEL"], ["마리바고", "MARIBAGO BLUEWATER"], ["더리프", "THE REEF"], ["크림슨", "CRIMSON RESORT & SPA"], ["바이호텔", "BAI HOTEL"]];
+  var ROOM_KO = [["디럭스", "DELUXE"], ["프리미어", "PREMIER"], ["스위트", "SUITE"], ["스윗", "SUITE"], ["오션", "OCEAN"], ["씨뷰", "SEAVIEW"], ["시뷰", "SEAVIEW"], ["가든", "GARDEN"], ["패밀리", "FAMILY"], ["풀빌라", "POOL VILLA"], ["주니어", "JUNIOR"], ["스튜디오", "STUDIO"], ["스탠다드", "STANDARD"], ["슈페리어", "SUPERIOR"], ["클럽", "CLUB"], ["파노라마", "PANORAMA"], ["엑제큐티브", "EXECUTIVE"], ["이그제큐티브", "EXECUTIVE"], ["막탄", "MACTAN"], ["세부", "CEBU"], ["뽀로로", "PORORO"]];
+  function normTxt(t) { return String(t || "").toUpperCase().replace(/[^A-Z0-9가-힣]/g, ""); }
+  function roomTokens(t) {
+    var u = String(t || "").toUpperCase();
+    ROOM_KO.forEach(function (x) { u = u.split(x[0]).join(" " + x[1] + " "); });
+    u = u.replace(/OCEAN\s*VIEW/g, "OCEAN").replace(/SEA\s*VIEW/g, "SEAVIEW").replace(/GARDEN\s*VIEW|G\/V/g, "GARDEN");
+    return u.split(/[^A-Z0-9]+/).filter(function (w) { return w.length >= 2 && w !== "ROOM" && w !== "VIEW" && w !== "THE"; });
+  }
+  function applyStayParsed(o) {
+    var st = state.stay, r = st.resort, n = 0, notes = [], H = window.PB_HOTELS || { hotels: [] };
+    if (o.name) { st.cust.name = o.name; n++; }
+    if (o.contact) { st.cust.contact = o.contact; n++; }
+    var nights = +o.nights || 0;
+    if (!nights && o.checkin && o.checkout) { var a = new Date(o.checkin + "T00:00:00"), b = new Date(o.checkout + "T00:00:00"), dd = Math.round((b - a) / 86400000); if (dd > 0 && dd < 90) nights = dd; }
+    if (o.checkin) { r.checkin = o.checkin; st.villa.checkin = o.checkin; st.sol.checkin = o.checkin; n++; }
+    if (nights) { r.nights = nights; st.villa.nights = nights; st.sol.nights = nights; n++; }
+    if (o.hotel) {
+      var nh = normTxt(o.hotel), idx = -1;
+      HOTEL_ALIAS.forEach(function (al) { if (idx < 0 && nh.indexOf(normTxt(al[0])) >= 0) idx = H.hotels.findIndex(function (h) { return h.name === al[1]; }); });
+      if (idx < 0 && nh.length >= 4) { var cand = H.hotels.map(function (h, i) { return [i, normTxt(h.name)]; }).filter(function (x) { return x[1] && (nh.indexOf(x[1]) >= 0 || x[1].indexOf(nh) >= 0); }); if (cand.length === 1) idx = cand[0][0]; }
+      if (idx >= 0) { if (String(r.hotel) !== String(idx)) r.picks = []; r.hotel = String(idx); r.name = o.hotel; st.tab = "resort"; n++; }
+      else { r.name = o.hotel; notes.push("숙소 '" + o.hotel + "'를 요금표에서 못 찾았습니다 — 숙소를 직접 골라 주세요"); }
+    }
+    if (o.adults) { r.adults = +o.adults; n++; }
+    if (o.kids != null && String(o.kids) !== "") { r.kids = +o.kids || 0; n++; }
+    if (o.kidAges) { r.kidAges = String(o.kidAges).split(/[^0-9]+/).filter(Boolean).join(","); n++; if (!+r.kids) r.kids = r.kidAges.split(",").length; }
+    if (o.note) { r.reqNote = o.note; n++; }
+    var hh = r.hotel !== "" && r.hotel != null ? H.hotels[+r.hotel] : null;
+    if (hh && (o.rooms || []).length) {
+      var picks = [];
+      o.rooms.forEach(function (rm) {
+        var cnt = Math.max(1, +rm.count || 1), tk = roomTokens(rm.type), best = null, bs = 0, tie = false;
+        hh.rooms.forEach(function (x) {
+          var rt = roomTokens(x.type), sc = tk.filter(function (w) { return rt.indexOf(w) >= 0; }).length - 0.1 * Math.abs(rt.length - tk.length);
+          if (!tk.length) return;
+          if (sc > bs) { bs = sc; best = x; tie = false; } else if (sc === bs && sc > 0) tie = true;
+        });
+        if (best && bs >= 1 && !tie) { picks.push({ type: best.type, rooms: cnt }); var bt = roomTokens(best.type); if (tk.some(function (w) { return bt.indexOf(w) < 0; })) notes.push("객실 '" + rm.type + "' → '" + best.type + "'로 가장 가깝게 맞췄습니다 — 맞는지 확인해 주세요"); } else notes.push("객실 '" + (rm.type || "(타입 없음)") + "'를 정확히 못 맞췄습니다 — 객실을 직접 골라 주세요");
+      });
+      if (picks.length) { r.picks = picks; n++; }
+    }
+    state.edited = {};
+    return { n: n, notes: notes };
+  }
+  function parseStayPaste(text) {
+    var o = { rooms: [] }, types = [], counts = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      var m = /^([^:：]+)[:：]\s*(.*)$/.exec(line); if (!m) return; var k = m[1], v = m[2].trim(); if (!v) return;
+      if (/영문/.test(k)) { o.ename = v; return; }
+      if (/성함|대표자|예약자/.test(k)) { o.name = v; return; }
+      if (/카카오|카톡|연락처|전화|휴대폰/.test(k)) { o.contact = v; return; }
+      if (/체크인/.test(k)) { o.checkin = parseDate(v); return; }
+      if (/체크아웃|박수/.test(k)) { var d = parseDate(v), nn = /(\d+)\s*박/.exec(v); if (d) o.checkout = d; if (nn) o.nights = +nn[1]; else if (!d && /^\d+$/.test(v)) o.nights = +v; return; }
+      if (/객실\s*타입|룸\s*타입|객실\s*종류/.test(k)) { types = v.split(/[,，/、]|\s및\s/).map(function (t) { return t.trim(); }).filter(Boolean); return; }
+      if (/객실\s*수|룸\s*수/.test(k)) { counts = (v.match(/\d+/g) || []).map(Number); return; }
+      if (/아동\s*나이|나이/.test(k)) { if (!/없음|해당\s*없/.test(v)) o.kidAges = (v.match(/\d+/g) || []).join(","); return; }
+      if (/인원/.test(k)) { var ad = /성인\s*(\d+)/.exec(v), kd = /아동\s*(\d+)/.exec(v); if (ad) o.adults = +ad[1]; if (kd) o.kids = +kd[1]; else if (ad) o.kids = 0; return; }
+      if (/숙소|호텔|리조트/.test(k)) { o.hotel = v; return; }
+      if (/요청|특이|기타|비고/.test(k)) { o.note = v; return; }
+    });
+    types.forEach(function (t, i) { o.rooms.push({ type: t, count: counts[i] != null ? counts[i] : (counts.length === 1 ? counts[0] : 1) }); });
+    return applyStayParsed(o);
   }
   function parsePaste(text) {
     var cur = null, hits = 0;
@@ -555,7 +621,8 @@
   function viewStay() {
     var st = state.stay, tabs = [["resort", "리조트·호텔"], ["villa", "풀빌라"], ["sol", "솔타나"]];
     var h = "<h1>숙소 견적</h1>" + '<div class="tabs">' + tabs.map(function (t) { return '<button data-stab="' + t[0] + '" class="' + (st.tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" +
-      '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div></div>";
+      '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div>" +
+        '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="spaste" placeholder="손님이 채워 보낸 예약폼(또는 자유롭게 쓴 글)을 그대로 붙여넣으세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doStayParse">내용 읽기</button><button class="btn sm gold" id="doStayAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="saiMsg" style="margin:6px 0 0">[내용 읽기]는 우리가 보낸 예약폼 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다. 읽은 뒤 날짜·인원·객실·금액을 꼭 한 번 확인하세요.</p></details></div>';
     if (st.tab === "resort") {
       var r = st.resort, c = Stay.resort(), hh = c.h, regions = {}, m = function (n) { return Stay.money(n, c.cur); };
       if (c.galaHit) h += '<div style="margin:8px 0;padding:10px 14px;border-radius:10px;background:#7a1f1f;color:#fff;font-weight:700">🎉 갈라 디너 포함 견적 — 아래 갈라 금액이 합계에 들어 있습니다</div>';
@@ -700,7 +767,7 @@
     state.bookings.forEach(function (x) { x.shops.forEach(function (s) { shopsAll[s] = 1; }); if (x.status === "견적") return; var m = (x.firstDate || x.created).slice(0, 7), o = months[m] = months[m] || { n: 0, krw: 0, php: 0, shops: {} }; o.n++; o.krw += x.profitKrw || 0; o.php += x.profitPhp || 0; o.usd = (o.usd || 0) + (x.profitUsd || 0); x.shops.forEach(function (s) { o.shops[s] = (o.shops[s] || 0) + 1; }); });
     var q = L.q.trim().toLowerCase();
     var b = state.bookings.filter(function (x) {
-      return (L.status === "전체" || x.status === L.status) && (L.shop === "전체" || x.shops.indexOf(L.shop) >= 0) &&
+      return (L.status === "전체" || (L.status === "확인 필요" ? !!(x.checks && x.checks.length && !x.checkDone) : x.status === L.status)) && (L.shop === "전체" || x.shops.indexOf(L.shop) >= 0) &&
         (!q || ((x.name || "") + " " + ((x.cust && x.cust.contact) || "") + " " + x.shops.join(" ") + " " + (x.firstDate || "") + " " + x.created).toLowerCase().indexOf(q) >= 0);
     });
     var far = "9999-99-99";
@@ -715,11 +782,11 @@
     h += '<div class="card" style="margin-top:10px"><input class="search" id="ledQ" placeholder="검색: 손님 이름·연락처·업체·날짜(예: 2026-12)" value="' + esc(L.q) + '">' +
       '<div class="grid2" style="margin-top:8px"><div><label>정렬</label><select id="ledSort">' + sorts.map(function (s) { return '<option value="' + s[0] + '"' + (L.sort === s[0] ? " selected" : "") + ">" + s[1] + "</option>"; }).join("") + "</select></div>" +
       '<div><label>옵션샵</label><select id="ledShop"><option>전체</option>' + Object.keys(shopsAll).sort(function (a, c) { return a.localeCompare(c, "ko"); }).map(function (s) { return "<option" + (L.shop === s ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select></div></div>" +
-      chips(["전체", "견적", "확정", "완료"], L.status, "ledst") +
+      chips(["전체", "확인 필요", "견적", "확정", "완료"], L.status, "ledst") +
       '<p class="note" style="margin:6px 0 0">견적 = ' + STATUS["견적"] + " · 확정 = " + STATUS["확정"] + " · 완료 = " + STATUS["완료"] + ". 견적→확정은 입금을 확인하고 직접 눌러 주세요. 확정 건은 이용일이 지나면 자동으로 완료로 바뀝니다. 월별 실적에는 확정·완료만 들어갑니다.</p></div>";
     h += '<p class="note" style="margin:10px 2px 0">' + b.length + "건 / 전체 " + state.bookings.length + '건</p><div class="list">' + (b.length ? b.map(function (x) {
-      return '<div class="card"><div class="row"><div class="grow"><b>' + esc(x.name || "(이름 없음)") + '</b> <span class="badge' + (x.status !== "견적" ? " ok" : "") + '">' + x.status + '</span><div class="note">' + esc(x.shops.join(" · ")) + " · 이용일 " + (x.firstDate || "미정") + " · 저장 " + x.created + '</div><div class="note">' + (x.kind === "stay" ? "견적 " + esc(x.payText) : "입금 " + won(x.payNow)) + " · 수익 " + (x.own ? "직영(따로 계산)" : profitStr(x.profitKrw, x.profitPhp, x.profitUsd)) + (x.auto ? " · 이용일이 지나 자동 완료" : "") + "</div></div></div>" +
-        '<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm ghost" data-open="' + x.id + '">불러오기</button>' + ["견적", "확정", "완료"].map(function (st) { return '<button class="btn sm ' + (x.status === st ? "" : "ghost") + '" data-st="' + x.id + "|" + st + '">' + st + "</button>"; }).join("") + '<button class="btn sm danger" data-del="' + x.id + '">삭제</button></div></div>';
+      return '<div class="card"><div class="row"><div class="grow"><b>' + esc(x.name || "(이름 없음)") + '</b> <span class="badge' + (x.status !== "견적" ? " ok" : "") + '">' + x.status + '</span>' + (x.checks && x.checks.length && !x.checkDone ? ' <span class="badge" style="background:#d00;color:#fff">🔴 확인 필요</span>' : "") + '<div class="note">' + esc(x.shops.join(" · ")) + " · 이용일 " + (x.firstDate || "미정") + " · 저장 " + x.created + '</div><div class="note">' + (x.kind === "stay" ? "견적 " + esc(x.payText) : "입금 " + won(x.payNow)) + " · 수익 " + (x.own ? "직영(따로 계산)" : profitStr(x.profitKrw, x.profitPhp, x.profitUsd)) + (x.auto ? " · 이용일이 지나 자동 완료" : "") + "</div>" + (x.checks && x.checks.length && !x.checkDone ? '<div class="note" style="color:#d00">• ' + x.checks.map(esc).join("<br>• ") + "</div>" : "") + "</div></div>" +
+        '<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm ghost" data-open="' + x.id + '">불러오기</button>' + ["견적", "확정", "완료"].map(function (st) { return '<button class="btn sm ' + (x.status === st ? "" : "ghost") + '" data-st="' + x.id + "|" + st + '">' + st + "</button>"; }).join("") + (x.checks && x.checks.length && !x.checkDone ? '<button class="btn sm gold" data-chk="' + x.id + '">확인 완료</button>' : "") + '<button class="btn sm danger" data-del="' + x.id + '">삭제</button></div></div>';
     }).join("") : '<div class="empty">' + (state.bookings.length ? "조건에 맞는 예약이 없습니다." : "저장된 예약이 없습니다.") + "</div>") + "</div>" +
       '<p class="note" style="margin-top:14px">장부는 이 기기의 브라우저에 저장되고, 로그인하면 다른 기기와 합쳐집니다. <button class="btn sm ghost" id="exportBk">백업 파일 내려받기</button></p>';
     return h;
@@ -751,7 +818,7 @@
     if (d.pdel != null) { state.stay.resort.picks.splice(+d.pdel, 1); state.edited = {}; save(); return render(); }
     if (t.id === "saveStay") {
       var sb = Stay.booking(), tab = state.stay.tab;
-      state.bookings.push({ u: Date.now(), id: "b" + Date.now(), created: today(), status: "견적", kind: "stay", stayTab: tab, staySnap: clone(state.stay[tab]), name: state.stay.cust.name, cust: clone(state.stay.cust), cart: [], shops: [sb.label], firstDate: sb.date || "", lastDate: sb.date ? addDays(sb.date, sb.nights) : "", payNow: 0, payText: sb.payText, profitKrw: 0, profitPhp: sb.profitPhp, profitUsd: sb.profitUsd, own: !!sb.own });
+      state.bookings.push({ u: Date.now(), id: "b" + Date.now(), created: today(), status: "견적", kind: "stay", stayTab: tab, staySnap: clone(state.stay[tab]), name: state.stay.cust.name, cust: clone(state.stay.cust), cart: [], checks: tab === "resort" ? Stay.resort().checks.concat(Stay.resort().hardWarn) : [], checkDone: false, shops: [sb.label], firstDate: sb.date || "", lastDate: sb.date ? addDays(sb.date, sb.nights) : "", payNow: 0, payText: sb.payText, profitKrw: 0, profitPhp: sb.profitPhp, profitUsd: sb.profitUsd, own: !!sb.own });
       save(); syncSoon(); return toast("장부에 저장했습니다");
     }
     if (d.ledst) { state.led.status = d.ledst; return render(); }
@@ -765,6 +832,23 @@
     if (d.reset) { delete state.edited[d.reset]; return render(); }
     if (t.id === "addRow") { state.stay.resort.rows.push({ type: "", tmj: "", rooms: 1 }); save(); return render(); }
     if (d.rdel != null) { state.stay.resort.rows.splice(+d.rdel, 1); state.edited = {}; save(); return render(); }
+    if (t.id === "doStayParse") {
+      var sr = parseStayPaste($("#spaste").value); save(); render(); toast(sr.n ? sr.n + "개 항목을 읽었습니다" : "읽을 수 있는 항목이 없습니다");
+      if (sr.notes.length) { var el2 = $("#saiMsg"); if (el2) el2.textContent = "확인 필요: " + sr.notes.join(" / "); }
+      return;
+    }
+    if (t.id === "doStayAi") {
+      var stx = $("#spaste").value, sam = function (m) { var el = $("#saiMsg"); if (el) el.textContent = m; };
+      if (!stx.trim()) return sam("손님 글을 먼저 붙여넣어 주세요.");
+      if (!sb || !sess) return sam("AI로 읽기는 로그인한 뒤에 쓸 수 있습니다. [장부] 화면에서 로그인해 주세요.");
+      sam("AI가 읽는 중… (10~40초)");
+      fresh().then(function () { return api("/functions/v1/pb-parse", { method: "POST", auth: true, timeout: 90000, body: { text: stx, mode: "stay", today: today() } }); }).then(function (j) {
+        var rr = j && j.result; if (!rr) throw new Error((j && j.error) || "결과가 비어 있습니다.");
+        var sr2 = applyStayParsed(rr); save(); render(); toast("AI가 " + sr2.n + "개 항목을 채웠습니다");
+        var el3 = $("#saiMsg"); if (el3) el3.textContent = "AI가 " + sr2.n + "개 항목을 채웠습니다. 날짜·인원·객실·금액을 꼭 한 번 확인하세요." + (sr2.notes.length ? " 확인 필요: " + sr2.notes.join(" / ") : "") + (j.usage ? " (사용량: 입력 " + num(j.usage.input) + " · 출력 " + num(j.usage.output) + " 토큰)" : "");
+      }).catch(function (e) { sam("AI 읽기 실패: " + koErr(e.message || String(e))); });
+      return;
+    }
     if (t.id === "doParse") { var n = parsePaste($("#paste").value); refreshQuote(); return toast(n ? n + "개 항목을 읽었습니다" : "읽을 수 있는 항목이 없습니다"); }
     if (t.id === "doAi") {
       var txt = $("#paste").value, am = function (m) { var el = $("#aiMsg"); if (el) el.textContent = m; };
@@ -791,6 +875,7 @@
       state.bookings.push({ u: Date.now(), id: "b" + Date.now(), created: today(), status: "견적", name: state.cust.name, cust: clone(state.cust), cart: clone(state.cart), shops: c.rows.map(function (r) { return r.shop.name; }), firstDate: dates[0] || "", lastDate: dates[dates.length - 1] || "", payNow: c.payNow, profitKrw: c.profitKrw, profitPhp: c.profitPhp, profitUsd: c.profitUsd });
       save(); syncSoon(); return toast("장부에 저장했습니다");
     }
+    if (d.chk) { state.bookings.forEach(function (x) { if (x.id === d.chk) { x.checkDone = true; touch(x); } }); save(); syncSoon(); return render(); }
     if (d.st) { var p = d.st.split("|"); state.bookings.forEach(function (x) { if (x.id === p[0]) { x.status = p[1]; x.auto = false; touch(x); } }); save(); syncSoon(); return render(); }
     if (d.del) { if (confirm("이 예약 기록을 삭제할까요? 되돌릴 수 없습니다.")) { state.bookings = state.bookings.filter(function (x) { return x.id !== d.del; }); state.tomb.push({ id: d.del, u: Date.now() }); save(); syncSoon(); render(); } return; }
     if (d.open) { var bk = state.bookings.filter(function (x) { return x.id === d.open; })[0]; if (bk && bk.kind === "stay") { state.stay.tab = bk.stayTab; state.stay[bk.stayTab] = Object.assign(clone(stayDefault[bk.stayTab]), clone(bk.staySnap)); state.stay.cust = clone(bk.cust || { name: "", contact: "" }); state.edited = {}; save(); go("stay"); }
