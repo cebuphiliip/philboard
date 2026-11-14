@@ -484,6 +484,50 @@
     types.forEach(function (t, i) { o.rooms.push({ type: t, count: counts[i] != null ? counts[i] : (counts.length === 1 ? counts[0] : 1) }); });
     return applyStayParsed(o);
   }
+  /* ---- 통합 붙여넣기: 손님 글 하나로 숙소 + 업체를 한 번에 채운다 ---- */
+  var STAY_KEY = /체크인|객실\s*타입|객실\s*수|숙소|호텔|리조트/;
+  function shopByHead(txt) {
+    var hd = String(txt).replace(/[(（].*$/, "").replace(/[—–-].*$/, "").replace(/ /g, ""), best = null;
+    D.shops.forEach(function (sh) { var nb = sh.name.replace(/[(（].*$/, "").replace(/ /g, ""); if (!best && (txt.indexOf(sh.name) >= 0 || (hd.length >= 2 && (nb.indexOf(hd) >= 0 || hd.indexOf(nb) >= 0)))) best = sh; });
+    return best;
+  }
+  function ensureInCart(id) { if (inCart(id)) return true; if (state.cart.length >= 3) return false; state.cart.push(newEntry(id)); return true; }
+  function syncCust() {
+    var n = state.stay.cust.name || state.cust.name, c = state.stay.cust.contact || state.cust.contact;
+    state.stay.cust.name = state.cust.name = n || ""; state.stay.cust.contact = state.cust.contact = c || "";
+  }
+  function parseUnified(text) {
+    var stayL = [], shopL = [], mode = "pre", notes = [], added = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      var hm = /^\s*■\s*(.+)$/.exec(line);
+      if (hm) {
+        var sh = shopByHead(hm[1]);
+        if (sh) { mode = "shop"; if (ensureInCart(sh.id)) { if (added.indexOf(sh.name) < 0) added.push(sh.name); shopL.push(line); } else notes.push("업체 '" + sh.name + "'는 3곳이 넘어 담지 못했습니다"); return; }
+        mode = STAY_KEY.test(hm[1]) ? "stay" : "other"; if (mode === "other") notes.push("'" + hm[1].trim() + "' 구역은 어느 업체인지 못 찾았습니다"); return;
+      }
+      if (mode === "stay") stayL.push(line); else if (mode === "shop") shopL.push(line); else if (mode === "pre") { var kv = /^([^:：]+)[:：]/.exec(line), kk = kv ? kv[1] : ""; if (/성함|대표자|예약자|카카오|카톡|연락처|전화|휴대폰/.test(kk) && !/영문/.test(kk)) { stayL.push(line); shopL.push(line); } else if (STAY_KEY.test(kk) || /인원|아동|나이|객실|요청|박수|체크아웃/.test(kk)) stayL.push(line); else shopL.push(line); }
+    });
+    var sr = { n: 0, notes: [] };
+    if (stayL.some(function (l) { return STAY_KEY.test(l.split(/[:：]/)[0]); })) sr = parseStayPaste(stayL.join("\n"));
+    var shopHits = state.cart.length ? parsePaste(shopL.join("\n")) : 0;
+    syncCust(); state.edited = {};
+    return { stay: sr.n, shops: shopHits, added: added, notes: sr.notes.concat(notes) };
+  }
+  function applyShopsParsed(r) {
+    var n = 0;
+    (r.entries || []).forEach(function (x) {
+      var e = state.cart.filter(function (c) { return c.shopId === x.shopId; })[0]; if (!e) return; var shop = shopById(e.shopId);
+      ["date", "time", "start", "ages", "pickup", "drop", "luggage", "option", "roster", "note"].forEach(function (k) { if (x[k] && (k !== "date" || /^\d{4}-\d{2}-\d{2}$/.test(x[k]))) { e[k] = x[k]; n++; } });
+      (x.items || []).forEach(function (it) { if (it.qty > 0 && shop.items.some(function (s2) { return s2.key === it.key; })) { e.q[it.key] = it.qty; n++; } });
+    });
+    return n;
+  }
+  function viewPaste() {
+    return '<div class="card"><h2 style="margin:0 0 6px">통합 붙여넣기</h2><p class="note" style="margin:0 0 8px">손님이 보낸 카톡 글을 한 번에 붙여넣으면 숙소 견적과 업체 견적 칸을 같이 채웁니다. 숙소 줄(숙소·체크인·객실…)은 숙소 견적으로, <b>■ 업체이름</b> 아래 줄은 그 업체 견적으로 들어갑니다.</p>' +
+      '<textarea id="upaste" style="min-height:200px" placeholder="손님이 채워 보낸 예약폼 전체를 그대로 붙여넣으세요"></textarea>' +
+      '<div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doUniParse">내용 읽기</button><button class="btn sm gold" id="doUniAi">AI로 읽기(자유롭게 쓴 글)</button></div>' +
+      '<p class="note" id="uMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다. 읽은 뒤 [숙소]·[견적] 화면에서 날짜·인원·금액을 꼭 확인하세요.</p></div>';
+  }
   function parsePaste(text) {
     var cur = null, hits = 0;
     text.split(/\r?\n/).forEach(function (line) {
@@ -791,7 +835,7 @@
       '<p class="note" style="margin-top:14px">장부는 이 기기의 브라우저에 저장되고, 로그인하면 다른 기기와 합쳐집니다. <button class="btn sm ghost" id="exportBk">백업 파일 내려받기</button></p>';
     return h;
   }
-  var VIEWS = { shop: viewShop, quote: viewQuote, ledger: viewLedger, stay: viewStay, lib: viewLib, home: viewHome };
+  var VIEWS = { paste: viewPaste, shop: viewShop, quote: viewQuote, ledger: viewLedger, stay: viewStay, lib: viewLib, home: viewHome };
   function render() {
     $("#app").innerHTML = (VIEWS[state.view] || viewHome)();
     $("#cartCount").textContent = state.cart.length;
@@ -832,6 +876,34 @@
     if (d.reset) { delete state.edited[d.reset]; return render(); }
     if (t.id === "addRow") { state.stay.resort.rows.push({ type: "", tmj: "", rooms: 1 }); save(); return render(); }
     if (d.rdel != null) { state.stay.resort.rows.splice(+d.rdel, 1); state.edited = {}; save(); return render(); }
+    if (t.id === "doUniParse") {
+      var ur = parseUnified($("#upaste").value), um = $("#uMsg");
+      var line = "숙소 " + ur.stay + "개 · 업체 " + ur.shops + "개 항목을 읽었습니다" + (ur.added.length ? " (견적에 담은 업체: " + ur.added.join(", ") + ")" : "");
+      save(); toast(ur.stay + ur.shops ? line : "읽을 수 있는 항목이 없습니다");
+      if (um) um.textContent = (ur.stay + ur.shops ? line + ". [숙소]·[견적] 화면에서 확인하세요." : "읽을 수 있는 항목이 없습니다. 양식(숙소/체크인…, ■ 업체이름)을 확인하거나 [AI로 읽기]를 써 보세요.") + (ur.notes.length ? " 확인 필요: " + ur.notes.join(" / ") : "");
+      return;
+    }
+    if (t.id === "doUniAi") {
+      var utx = $("#upaste").value, uam = function (m) { var el = $("#uMsg"); if (el) el.textContent = m; };
+      if (!utx.trim()) return uam("손님 글을 먼저 붙여넣어 주세요.");
+      if (!sb || !sess) return uam("AI로 읽기는 로그인한 뒤에 쓸 수 있습니다. [장부] 화면에서 로그인해 주세요.");
+      uam("AI가 읽는 중… (10~40초)");
+      var mentioned = D.shops.filter(function (sh) { return utx.indexOf(sh.name.replace(/[(（].*$/, "").trim()) >= 0; });
+      var addedN = [];
+      mentioned.forEach(function (sh) { if (ensureInCart(sh.id)) addedN.push(sh.name); });
+      var shopsIn2 = state.cart.map(function (e) { var s = shopById(e.shopId); return { id: s.id, name: s.name, cat: s.cat, needStart: !!s.needStart, timeOptions: s.timeOptions || [], optionLabel: s.optionLabel || "", items: s.items.map(function (it) { return { key: it.key, label: it.label }; }) }; });
+      var call = function (body) { return api("/functions/v1/pb-parse", { method: "POST", auth: true, timeout: 90000, body: body }); };
+      fresh().then(function () { return Promise.all([call({ text: utx, mode: "stay", today: today() }), shopsIn2.length ? call({ text: utx, shops: shopsIn2, today: today() }) : Promise.resolve(null)]); }).then(function (js) {
+        var sj = js[0], hj = js[1], sres = sj && sj.result; if (!sres) throw new Error((sj && sj.error) || "결과가 비어 있습니다.");
+        var sr3 = { n: 0, notes: [] }, hasStay = !!(sres.hotel || sres.checkin || (sres.rooms || []).length);
+        if (hasStay) sr3 = applyStayParsed(sres); else { if (sres.name) { state.stay.cust.name = sres.name; } if (sres.contact) { state.stay.cust.contact = sres.contact; } }
+        var hn = 0; if (hj && hj.result) { if (hj.result.name) state.cust.name = hj.result.name; if (hj.result.contact) state.cust.contact = hj.result.contact; hn = applyShopsParsed(hj.result); }
+        syncCust(); state.edited = {}; save();
+        var msg = "AI가 숙소 " + sr3.n + "개 · 업체 " + hn + "개 항목을 채웠습니다" + (addedN.length ? " (견적에 담은 업체: " + addedN.join(", ") + ")" : "") + (hasStay ? "" : " (숙소 내용은 글에서 찾지 못했습니다)") + (!shopsIn2.length ? " (업체 이름이 글에 없어 업체는 읽지 않았습니다 — 업체를 먼저 담으면 같이 읽습니다)" : "") + ". [숙소]·[견적] 화면에서 날짜·인원·금액을 꼭 확인하세요." + (sr3.notes.length ? " 확인 필요: " + sr3.notes.join(" / ") : "");
+        toast("AI가 읽었습니다"); uam(msg);
+      }).catch(function (e) { uam("AI 읽기 실패: " + koErr(e.message || String(e))); });
+      return;
+    }
     if (t.id === "doStayParse") {
       var sr = parseStayPaste($("#spaste").value); save(); render(); toast(sr.n ? sr.n + "개 항목을 읽었습니다" : "읽을 수 있는 항목이 없습니다");
       if (sr.notes.length) { var el2 = $("#saiMsg"); if (el2) el2.textContent = "확인 필요: " + sr.notes.join(" / "); }
