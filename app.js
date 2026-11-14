@@ -246,16 +246,32 @@
           (ST.galaAge || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) ga = [x.lo, x.hi]; });
           (ST.galaNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) gn.push(x.note); });
           var kc = cnt(ga[0], ga[1]);
-          extras.push({ name: "갈라 디너(" + (g.to ? mdKo(g.date) + "~" + mdKo(g.to) + " 지나는 숙박" : mdKo(hit)) + ", 의무)", adult: g.adult, child: g.child, total: adults * g.adult + kc * g.child, note: gn.join(" / ") + (kids && ga[0] > 0 ? " ※ 아동 요금 대상: 만 " + ga[0] + "~" + ga[1] + "세" + (ageUnknown ? " (아동 나이 미입력 — 아동 전원 대상으로 계산)" : "") : "") });
+          extras.push({ name: "갈라 디너(" + (g.to ? mdKo(g.date) + "~" + mdKo(g.to) + " 지나는 숙박" : mdKo(hit)) + ", 의무)", adult: g.adult, child: g.child, total: adults * g.adult + kc * g.child, note: gn.join(" / ") + (kids && ga[0] > 0 ? " ※ 아동 요금 대상: 만 " + ga[0] + "~" + ga[1] + "세" : "") });
         });
       }
-      if (h) (ST.mandatory || []).forEach(function (m) { if (h.name.indexOf(m.match) >= 0 && nights >= m.minNights) m.items.forEach(function (it) { var kc = it.ageLo != null ? cnt(it.ageLo, it.ageHi) : kids; extras.push({ name: it.name, adult: it.adult, child: it.child, total: (adults * it.adult + kc * it.child) * (m.perNight ? nights : 1), note: m.note + (it.ageLo != null && ageUnknown ? " ※ 아동 나이 미입력: 아동 전원 대상으로 계산" : "") }); }); });
-      if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) infos.push(x.note); });
+      if (h) (ST.mandatory || []).forEach(function (m) { if (h.name.indexOf(m.match) >= 0 && nights >= m.minNights) m.items.forEach(function (it) { var kc = it.ageLo != null ? cnt(it.ageLo, it.ageHi) : kids; extras.push({ name: it.name, adult: it.adult, child: it.child, total: (adults * it.adult + kc * it.child) * (m.perNight ? nights : 1), note: m.note }); }); });
       var pk = h && r.picks && r.picks[0] ? h.rooms.filter(function (x) { return x.type === r.picks[0].type; })[0] : null, ebn = Math.max(0, +r.ebn || 0);
-      if (h && pk && pk.eb != null) {
-        if (ebn) extras.push({ name: (h.ebLabel || "엑스트라 베드") + " " + ebn + "명 × " + nights + "박", adult: pk.eb, child: 0, total: ebn * pk.eb * nights, note: "1인 1박 요금 · 조식 포함 여부와 침대 가능 여부는 예약 시 확인해 드립니다" });
-        if (h.cbfAge && kids && !extras.some(function (x) { return x.name.indexOf("아동 조식") >= 0; })) { var cc = cnt(h.cbfAge[0], h.cbfAge[1]); infos.push("아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세) 1인 1박 " + (pk.cbf ? Stay.money(pk.cbf, cur) : "무료") + " · 해당 아동 " + cc + "명" + (pk.cbf && cc ? " × " + nights + "박 = " + Stay.money(cc * pk.cbf * nights, cur) : "") + " — 합계에는 넣지 않았습니다(현지 지불인지 예약 시 포함인지 숙소에 확인)" + (ageUnknown ? " ※ 아동 나이 미입력" : "")); }
-      } else if (h && pk && ebn) infos.push("이 객실은 TMJ에 엑스트라 베드 요금 표기가 없습니다 — 숙소에 직접 확인하세요.");
+      var checks = [];
+      if (ageUnknown) checks.push("아동 나이가 입력되지 않았습니다 — 갈라·의무식·아동 조식은 아동 나이로 대상이 갈립니다. 지금은 아동 전원 대상으로 계산했으니 나이를 넣어 확인하세요.");
+      if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) checks.push(x.note); });
+      if (h && extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; })) {
+        if (/TBA|TO BE ADVIS/i.test(h.remark || "")) checks.push("갈라 디너 체크요망: TMJ 비고에 금액·내용이 미정(TBA)으로 표기돼 있습니다. 갈라디너 내용을 숙소에 확인하세요.");
+        if (kids && h.gala.some(function (g) { return !g.child; })) checks.push("갈라 디너 체크요망: 아동 갈라 금액이 표에 없습니다(0으로 계산됨). 아동 갈라 요금을 숙소에 확인하세요.");
+        if (h.gala.some(function (g) { return g.child > 0 && g.child > g.adult; })) checks.push("갈라 디너 체크요망: 아동 금액이 성인보다 큽니다. 자료 오류일 수 있어 확인하세요.");
+      }
+      if (h && pk) {
+        if (h.cbfAge && kids && !extras.some(function (x) { return x.name.indexOf("아동 조식") >= 0; })) {
+          if (pk.cbf != null) {
+            var cc = cnt(h.cbfAge[0], h.cbfAge[1]);
+            if (pk.cbf > 0 && cc) extras.push({ name: "아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세, 사전결제) " + cc + "명 × " + nights + "박", adult: 0, child: pk.cbf, total: cc * pk.cbf * nights, note: "아동 조식은 엑스트라 베드와 별도 요금" });
+            else if (pk.cbf === 0) infos.push("아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세)은 무료입니다.");
+          } else checks.push("이 객실은 TMJ에 아동 조식 요금 표기가 없어 합계에 넣지 못했습니다 — 숙소에 확인하세요.");
+        }
+        if (ebn) {
+          if (pk.eb != null) extras.push({ name: (h.ebLabel || "엑스트라 베드") + " " + ebn + "명 × " + nights + "박", adult: pk.eb, child: 0, total: ebn * pk.eb * nights, note: "성인 엑스트라 베드 요금에는 조식이 포함됩니다. 침대 가능 여부는 예약 시 확인해 드립니다" });
+          else checks.push("이 객실은 TMJ에 엑스트라 베드 요금 표기가 없어 합계에 넣지 못했습니다 — 숙소에 확인하세요.");
+        }
+      }
       var exTotal = extras.reduce(function (a, x) { return a + x.total; }, 0), minWarn = [], MIN = /MIN\.?\s*(?:OF\s*)?(\d+)\s*N/i, mm;
       if (h) {
         if ((mm = MIN.exec(h.name)) && nights < +mm[1]) minWarn.push("이 숙소는 최소 " + mm[1] + "박부터 예약됩니다(지금 " + nights + "박).");
@@ -267,7 +283,6 @@
         var vm = (h.valid || "").match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/), vrng = vm ? [vm[1], vm[2]] : null;
         if (rng(h.stay)) hardWarn.push("이 요금표는 " + h.stay[0] + " ~ " + h.stay[1] + " 투숙분만 해당합니다. 선택한 날짜(" + first + " ~ " + last + ")가 범위를 벗어나 요금과 서차지·갈라가 맞지 않을 수 있습니다.");
         else if (rng(vrng)) hardWarn.push("이 요금표의 유효기간은 " + vrng[0] + " ~ " + vrng[1] + "입니다. 선택한 날짜(" + first + " ~ " + last + ")가 범위를 벗어나 새 요금표가 필요합니다.");
-        var cout = addDays(r.checkin, nights); (ST.noDec31 || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && (cout.slice(5) === "12-31" || (x.noCheckin && r.checkin.slice(5) === "12-31"))) hardWarn.push("이 숙소는 12월 31일 " + (x.noCheckin && r.checkin.slice(5) === "12-31" ? "체크인" : "체크아웃") + "이 불가합니다(필코·TMJ 공통). 날짜를 바꿔 주세요."); });
         var peak = dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; });
         if (peak && !h.sur.length && !h.gala.length) hardWarn.push("연말연시(12/20~1/5) 날짜인데 이 요금표에는 서차지·갈라 디너 자료가 없습니다. 아래 TMJ 비고를 확인하고, 필요하면 TMJ에서 연말 요금을 다시 확인하세요.");
         if (/TBA|TO BE ADVISE|BEST AVAILABLE RATE|BAR\b/i.test(h.remark || "") && peak) hardWarn.push("TMJ 비고에 '정해지지 않음(TBA)·성수기 별도(BAR)' 표시가 있습니다. 연말 날짜는 TMJ에서 정확한 금액을 확인하세요.");
@@ -277,7 +292,7 @@
         if (alts.length) hardWarn.push("같은 숙소의 다른 요금표 중 이 날짜를 포함하고 서차지·갈라 자료가 있는 것: " + alts.join(" / "));
       }
       if (h) (h.remark || "").split(/\n/).forEach(function (ln) { if (/EXTRA|ADDITIONAL|CHILD|BREAKFAST|BFAST|B\/F|ADULT|SURCHARGE|CHARGE|MANDATORY|GALA/i.test(ln) && ln.trim().length > 6) remarkLines.push(ln.trim()); });
-      var rr = state.stay.resort, sig = [rr.hotel, rr.checkin, rr.nights, rr.adults, rr.kids, rr.kidAges, rr.ebn, (rr.picks || []).map(function (q) { return q.type + "x" + q.rooms; }).join(",")].join("|"), needOk = !!(h && (hardWarn.length || remarkLines.length || h.sur.length || h.gala.length || (dates.length && dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; })))); return { infos: infos, hardWarn: hardWarn, remarkLines: remarkLines, needOk: needOk, sig: sig, okDone: needOk && rr.okSig === sig, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
+      var rr = state.stay.resort, sig = [rr.hotel, rr.checkin, rr.nights, rr.adults, rr.kids, rr.kidAges, rr.ebn, (rr.picks || []).map(function (q) { return q.type + "x" + q.rooms; }).join(",")].join("|"), needOk = !!(h && (checks.length || hardWarn.length || remarkLines.length || h.sur.length || h.gala.length || (dates.length && dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; })))); return { checks: checks, galaHit: extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; }), infos: infos, hardWarn: hardWarn, remarkLines: remarkLines, needOk: needOk, sig: sig, okDone: needOk && rr.okSig === sig, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
         total: lines.reduce(function (a, x) { return a + x.total; }, 0) + exTotal, profit: lines.reduce(function (a, x) { return a + x.profit; }, 0) };
     },
     resortText: function () {
@@ -291,7 +306,7 @@
         if (x.promoN) d.push("프로모션 요금 적용");
         t += (d.length ? " (" + d.join(", ") + ")" : "") + "\n";
       });
-      c.extras.forEach(function (x) { t += "· " + x.name + ": 성인 1인 " + m(x.adult) + (x.child ? " / 아동 1인 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : "") + (x.note ? " ※ " + x.note : "") + "\n"; });
+      c.extras.forEach(function (x) { t += "· " + x.name + ": " + (x.adult ? "성인 1인 " + m(x.adult) : "") + (x.child ? (x.adult ? " / " : "") + "아동 1인 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : "") + (x.note ? " ※ " + x.note : "") + "\n"; });
       if (!c.all && c.lines.length) t += "\n→ 합계 " + m(c.total) + "\n" + (c.cur === "USD" ? fxLine(c.total) + "\n" : "");
       t += "\n※ 객실당 요금이며 조식이 포함되어 있습니다.\n" + (c.dated ? "" : "※ 성수기·연휴에는 추가 요금이 붙을 수 있어, 날짜가 정해지면 정확한 금액을 다시 안내해 드립니다.\n") + "※ " + D.priceDate + " 기준 요금이며, 예약을 진행할 때 정확한 금액을 한 번 더 확인해 드립니다.\n\n" + ST.resortSteps;
       return t;
@@ -543,6 +558,7 @@
       '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div></div>";
     if (st.tab === "resort") {
       var r = st.resort, c = Stay.resort(), hh = c.h, regions = {}, m = function (n) { return Stay.money(n, c.cur); };
+      if (c.galaHit) h += '<div style="margin:8px 0;padding:10px 14px;border-radius:10px;background:#7a1f1f;color:#fff;font-weight:700">🎉 갈라 디너 포함 견적 — 아래 갈라 금액이 합계에 들어 있습니다</div>';
       H.hotels.forEach(function (x, i) { (regions[x.region] = regions[x.region] || []).push([i, x.name]); });
       h += '<div class="card" style="margin-top:10px"><h2>리조트·호텔</h2>' +
         '<div><label>숙소 — TMJ 요금 ' + esc(H.date || "없음") + " 기준 " + H.hotels.length + '곳</label><select id="hotelSel"><option value="">직접 입력</option>' + Object.keys(regions).map(function (g) { return '<optgroup label="' + esc(g) + '">' + regions[g].map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(r.hotel) ? " selected" : "") + ">" + esc(x[1]) + "</option>"; }).join("") + "</optgroup>"; }).join("") + "</select></div>" +
@@ -556,7 +572,7 @@
         var info = [];
         if (!r.checkin) info.push("체크인 날짜를 넣어야 성수기 추가 요금·갈라 디너가 계산됩니다.");
         c.lines.forEach(function (x) { if (x.sur) info.push(x.type + ": 성수기 추가 요금 " + m(x.sur) + " (" + x.surNames.join(", ") + ", " + x.surN + "박)"); if (x.promoN) info.push(x.type + ": 프로모 요금 " + x.promoN + "박 적용"); });
-        c.extras.forEach(function (x) { info.push(x.name + ": 성인 " + m(x.adult) + " / 아동 " + m(x.child) + (x.total ? " → " + m(x.total) : " (인원을 넣으면 계산)")); });
+        c.extras.forEach(function (x) { info.push(x.name + ": " + (x.adult ? "성인 " + m(x.adult) : "") + (x.child ? (x.adult ? " / " : "") + "아동 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : " (인원을 넣으면 계산)")); });
         if (c.hardWarn.length) h += '<p class="warn big" style="margin-top:10px">🚨 ' + c.hardWarn.map(esc).join("<br>🚨 ") + "</p>";
         if (c.infos.length) h += '<p class="warn" style="margin-top:10px">ℹ ' + c.infos.map(esc).join("<br>ℹ ") + "</p>";
         if (c.minWarn.length) h += '<p class="warn big" style="margin-top:10px">⚠ ' + c.minWarn.map(esc).join("<br>⚠ ") + "</p>";
@@ -571,7 +587,7 @@
       h += "</div>" + '<div class="total" style="margin-top:12px"><small>' + (c.all ? "전체 객실 타입 안내(객실을 고르면 합계가 나옵니다)" : "손님 견적 합계(" + c.nights + "박)") + '</small><div class="big">' + (c.all ? "객실 " + c.lines.length + "종" : m(c.total)) + "</div>" + (c.exTotal ? "<small>이 중 갈라·의무 요금 " + m(c.exTotal) + "</small>" : "") + "</div>" +
         '<div class="profit" style="margin-top:8px">' + (c.all ? "객실 1개·1박당 수익 " + m(c.margin) : "예상 수익 " + m(c.profit)) + " (손님 글에는 나가지 않습니다)</div>" +
         (c.needOk ? '<label class="warn big" style="display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer"><input type="checkbox" id="okChk" style="width:24px;height:24px"' + (c.okDone ? " checked" : "") + '><span>서차지·갈라 디너·성인/아동 추가금·조식 추가금·연말 날짜를 모두 확인했습니다 (체크해야 견적 복사가 됩니다)</span></label>' : "") +
-        '<div class="card" style="margin-top:12px">' + outBox("stay_resort_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.resortAsk()) + outBox("stay_resort", "② 숙소 견적", Stay.resortText()) + "</div>";
+        '<div class="card" style="margin-top:12px">' + outBox("stay_resort_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.resortAsk()) + outBox("stay_resort", "② 숙소 견적", Stay.resortText()) + "</div>" + (c.checks.length ? '<div class="card" style="margin-top:12px;border:2px solid #d00"><b style="color:#d00">🔴 체크요망 — 확실하지 않거나 애매한 내용(손님 글에는 나가지 않습니다)</b><br><span style="color:#d00">• ' + c.checks.map(esc).join("<br>• ") + "</span></div>" : "");
     }
     if (st.tab === "villa") {
       var v = st.villa, vc = Stay.villa();

@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11j",
+    version: "2026-11-11k",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
@@ -399,14 +399,12 @@
       /* 갈라 디너 아동 요금 대상 연령(필코 2026-27 표 기준, 2026-11-14) — 표에 연령이 없으면 아동 전원에게 붙인다 */
       galaAge: [{ match: "JPARK", lo: 7, hi: 12 }, { match: "SHANGRILA", lo: 7, hi: 11 }, { match: "SOLEA", lo: 5, hi: 12 }, { match: "CRIMSON", lo: 4, hi: 12 }, { match: "THE REEF", lo: 6, hi: 11 }, { match: "MARIBAGO", lo: 6, hi: 11 }],
       galaNotes: [
-        { match: "JPARK ISLAND", note: "밤에 도착하는 항공편은 갈라 디너 면제(웨이버) 가능 — 항공편명을 꼭 받아 두세요(필코 확인)" },
+        { match: "JPARK ISLAND", note: "12/31 밤 또는 1/1에 도착하는 항공편은 갈라 디너 면제(웨이버) — 항공편명을 꼭 알려 주세요" },
         { match: "SOLEA MACTAN", note: "12/31 밤 도착은 면제가 아니라 1/1 디너로 진행됩니다" },
         { match: "MOVENPICK", note: "12/31 자정 도착도 면제 없음 — 다음 날 점심 또는 저녁으로 진행." },
         { match: "MARIBAGO", note: "자정 도착은 다음 날 점심 또는 저녁으로 대체(필코 확인)" }
       ],
       internalNotes: [{ match: "MOVENPICK HOTEL", note: "뫼벤픽 의무 디너 뷔페(성인·아동 별도 금액): 필코 표는 2/14~2/18 지나는 숙박, TMJ는 2/5로 표기 — 둘 다 견적에 반영했으니 실제 날짜를 숙소에 확인하세요." }],
-      /* 12/31 체크아웃(샹그릴라는 체크인도) 불가 숙소 */
-      noDec31: [{ match: "SHANGRILA MACTAN", noCheckin: true }, { match: "SOLEA MACTAN" }, { match: "MOVENPICK HOTEL" }, { match: "THE REEF" }, { match: "CRIMSON RESORT" }],
       mandatory: [
         { match: "SOLEA", minNights: 3, cur: "PHP", items: [{ name: "의무 석식 뷔페(1회)", adult: 800, child: 400, ageLo: 5, ageHi: 12 }, { name: "라군파크(워터파크) 1회", adult: 400, child: 200, ageLo: 5, ageHi: 12 }], note: "3박 이상 예약 시 적용(아동은 만 5~12세)" },
         { match: "JPARK ISLAND RESORT (MIN. 2N)", minNights: 2, cur: "USD", perNight: true, items: [{ name: "아동 조식 의무(1박당, 만 7~12세)", adult: 0, child: 10, ageLo: 7, ageHi: 12 }], note: "만 7세 이상 아동은 조식 추가금이 반드시 붙습니다(만 6세 이하는 없음)" }
