@@ -15,7 +15,7 @@
     get: function (k, d) { try { var v = localStorage.getItem("pb_" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem("pb_" + k, JSON.stringify(v)); } catch (e) { } }
   };
-  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" } };
+  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, kids7: "", cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" } };
   var state = {
     view: "home", shopId: null, q: "", cat: "전체", tab: "ask", libOpen: {}, libQ: "",
     cart: store.get("cart", []), cust: store.get("cust", { name: "", contact: "" }),
@@ -235,11 +235,11 @@
         }
         return { type: d.type, rooms: s.rooms, night1: d.rate + margin, base: base * s.rooms, sur: sur * s.rooms, surN: surN, surNames: surNames, promoN: promoN, total: (base + sur) * s.rooms, profit: margin * nights * s.rooms };
       });
-      var extras = [];
+      var extras = [], k7known = String(state.stay.resort.kids7) !== "", k7 = k7known ? Math.min(+state.stay.resort.kids7, kids) : kids;
       if (h && dates.length) {
-        h.gala.forEach(function (g) { var hit = dates.filter(function (dt) { return dt.slice(5) === g.date.slice(5); })[0]; if (hit) extras.push({ name: "갈라 디너(" + mdKo(hit) + ", 의무)", adult: g.adult, child: g.child, total: adults * g.adult + kids * g.child }); });
+        h.gala.forEach(function (g) { var hit = dates.filter(function (dt) { return dt.slice(5) === g.date.slice(5); })[0]; if (hit) var gn = ""; (ST.galaNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) gn = x.note; }); extras.push({ name: "갈라 디너(" + mdKo(hit) + ", 의무)", adult: g.adult, child: g.child, total: adults * g.adult + kids * g.child, note: gn }); });
       }
-      if (h) (ST.mandatory || []).forEach(function (m) { if (h.name.indexOf(m.match) >= 0 && nights >= m.minNights) m.items.forEach(function (it) { extras.push({ name: it.name, adult: it.adult, child: it.child, total: adults * it.adult + kids * it.child, note: m.note }); }); });
+      if (h) (ST.mandatory || []).forEach(function (m) { if (h.name.indexOf(m.match) >= 0 && nights >= m.minNights) m.items.forEach(function (it) { extras.push({ name: it.name, adult: it.adult, child: it.child, total: (adults * it.adult + (it.age7 ? k7 : kids) * it.child) * (m.perNight ? nights : 1), note: m.note + (it.age7 && !k7known && kids ? " ※ 아동 나이 미입력: 아동 전원 만 7세 이상으로 계산했습니다" : "") }); }); });
       var exTotal = extras.reduce(function (a, x) { return a + x.total; }, 0), minWarn = [], MIN = /MIN\.?\s*(?:OF\s*)?(\d+)\s*N/i, mm;
       if (h) {
         if ((mm = MIN.exec(h.name)) && nights < +mm[1]) minWarn.push("이 숙소는 최소 " + mm[1] + "박부터 예약됩니다(지금 " + nights + "박).");
@@ -530,7 +530,7 @@
       h += '<div class="card" style="margin-top:10px"><h2>리조트·호텔</h2>' +
         '<div><label>숙소 — TMJ 요금 ' + esc(H.date || "없음") + " 기준 " + H.hotels.length + '곳</label><select id="hotelSel"><option value="">직접 입력</option>' + Object.keys(regions).map(function (g) { return '<optgroup label="' + esc(g) + '">' + regions[g].map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(r.hotel) ? " selected" : "") + ">" + esc(x[1]) + "</option>"; }).join("") + "</optgroup>"; }).join("") + "</select></div>" +
         '<div class="grid2" style="margin-top:10px">' + sInput(["resort", "name"], "손님 글에 쓸 숙소 이름") + sInput(["resort", "checkin"], "체크인 ★(성수기 요금 계산)", "date") + sInput(["resort", "nights"], "박수", "number", ' min="1"') +
-        sSelect(["resort", "adults"], "성인(갈라·의무 요금 계산)", range(0, 12)) + sSelect(["resort", "kids"], "아동", range(0, 10)) +
+        sSelect(["resort", "adults"], "성인(갈라·의무 요금 계산)", range(0, 12)) + sSelect(["resort", "kids"], "아동", range(0, 10)) + (r.kids > 0 ? sSelect(["resort", "kids7"], "아동 중 만 7세 이상 인원(조식 추가금 대상)", [["", "나이 확인 필요"]].concat(range(0, +r.kids))) : "") +
         (hh ? "" : sSelect(["resort", "cur"], "통화", [["PHP", "페소"], ["USD", "달러"]])) +
         sInput(["resort", "margin"], "1박당 붙이는 금액(비우면 " + ST.resortMargin[c.cur] + (c.cur === "USD" ? "달러" : "페소") + ")", "number") + "</div>";
       if (hh) {

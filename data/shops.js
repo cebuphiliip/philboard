@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11h",
+    version: "2026-11-11i",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
@@ -396,8 +396,10 @@
       soltanaMaxPax: 5, soltanaStdPax: 4, // 객실당 최대 인원(좁아도 괜찮다는 손님만 5명) / 기준 최대 인원
       soltanaNote: "커뮤니티 시설 확충으로 수영장 이용 불가",
       /* 솔레아처럼 숙박 조건에 따라 인당 붙는 의무 요금: match = TMJ 호텔 이름에 들어 있는 글자 */
+      galaNotes: [{ match: "JPARK ISLAND", note: "밤에 도착하는 항공편은 갈라 디너 면제(웨이버) 가능 — 항공편명을 꼭 받아 두세요(필코 확인)" }],
       mandatory: [
-        { match: "SOLEA", minNights: 3, cur: "PHP", items: [{ name: "의무 석식 뷔페(1회)", adult: 800, child: 400 }, { name: "라군파크(워터파크) 1회", adult: 400, child: 200 }], note: "3박 이상 예약 시 적용(아동은 만 5~12세)" }
+        { match: "SOLEA", minNights: 3, cur: "PHP", items: [{ name: "의무 석식 뷔페(1회)", adult: 800, child: 400 }, { name: "라군파크(워터파크) 1회", adult: 400, child: 200 }], note: "3박 이상 예약 시 적용(아동은 만 5~12세)" },
+        { match: "JPARK ISLAND RESORT (MIN. 2N)", minNights: 2, cur: "USD", perNight: true, items: [{ name: "아동 조식 의무(1박당, 만 7~12세)", adult: 0, child: 10, age7: true }], note: "만 7세 이상 아동은 조식 추가금이 반드시 붙습니다(만 6세 이하는 없음)" }
       ]
     },
 
