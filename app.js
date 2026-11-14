@@ -245,7 +245,22 @@
         if ((mm = MIN.exec(h.name)) && nights < +mm[1]) minWarn.push("이 숙소는 최소 " + mm[1] + "박부터 예약됩니다(지금 " + nights + "박).");
         h.sur.forEach(function (x) { var m2 = MIN.exec(x.name); if (m2 && nights < +m2[1] && dates.some(function (dt) { return dt >= x.from && dt <= x.to; })) minWarn.push(x.name.replace(/\s*\(.*$/, "") + " 기간(" + x.from + " ~ " + x.to + ")은 최소 " + m2[1] + "박입니다(지금 " + nights + "박)."); });
       }
-      return { h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
+      var hardWarn = [], remarkLines = [];
+      if (h && dates.length) {
+        var first = dates[0], last = dates[dates.length - 1], rng = function (a) { return a && a.length === 2 && (first < a[0] || last > a[1]); };
+        var vm = (h.valid || "").match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/), vrng = vm ? [vm[1], vm[2]] : null;
+        if (rng(h.stay)) hardWarn.push("이 요금표는 " + h.stay[0] + " ~ " + h.stay[1] + " 투숙분만 해당합니다. 선택한 날짜(" + first + " ~ " + last + ")가 범위를 벗어나 요금과 서차지·갈라가 맞지 않을 수 있습니다.");
+        else if (rng(vrng)) hardWarn.push("이 요금표의 유효기간은 " + vrng[0] + " ~ " + vrng[1] + "입니다. 선택한 날짜(" + first + " ~ " + last + ")가 범위를 벗어나 새 요금표가 필요합니다.");
+        var peak = dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; });
+        if (peak && !h.sur.length && !h.gala.length) hardWarn.push("연말연시(12/20~1/5) 날짜인데 이 요금표에는 서차지·갈라 디너 자료가 없습니다. 아래 TMJ 비고를 확인하고, 필요하면 TMJ에서 연말 요금을 다시 확인하세요.");
+        if (/TBA|TO BE ADVISE|BEST AVAILABLE RATE|BAR\b/i.test(h.remark || "") && peak) hardWarn.push("TMJ 비고에 '정해지지 않음(TBA)·성수기 별도(BAR)' 표시가 있습니다. 연말 날짜는 TMJ에서 정확한 금액을 확인하세요.");
+        var fam = (h.name || "").replace(/\s*\(.*$/, "").replace(/\s+(PKG|PACKAGE|BUFFET|\(.*)$/i, "").trim().toUpperCase().split(/\s+/), alts = [];
+        fam = (/^(THE|BE|LA|BEST|CASA|CROWN|COPENHAGEN|HENANN|COSTABELLA)$/.test(fam[0]) && fam.length > 1 ? fam[0] + " " + fam[1] : fam[0]);
+        if (hardWarn.length) H.hotels.forEach(function (o, oi) { if (o === h || o.name.toUpperCase().indexOf(fam) !== 0) return; var ok = true, ms = (o.valid || "").match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/); if (o.stay) ok = !(first < o.stay[0] || last > o.stay[1]); else if (ms) ok = !(first < ms[1] || last > ms[2]); if (ok && (o.sur.length || o.gala.length)) alts.push(o.name); });
+        if (alts.length) hardWarn.push("같은 숙소의 다른 요금표 중 이 날짜를 포함하고 서차지·갈라 자료가 있는 것: " + alts.join(" / "));
+      }
+      if (h) (h.remark || "").split(/\n/).forEach(function (ln) { if (/EXTRA|ADDITIONAL|CHILD|BREAKFAST|BFAST|B\/F|ADULT|SURCHARGE|CHARGE|MANDATORY|GALA/i.test(ln) && ln.trim().length > 6) remarkLines.push(ln.trim()); });
+      return { hardWarn: hardWarn, remarkLines: remarkLines, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
         total: lines.reduce(function (a, x) { return a + x.total; }, 0) + exTotal, profit: lines.reduce(function (a, x) { return a + x.profit; }, 0) };
     },
     resortText: function () {
@@ -525,7 +540,9 @@
         if (!r.checkin) info.push("체크인 날짜를 넣어야 성수기 추가 요금·갈라 디너가 계산됩니다.");
         c.lines.forEach(function (x) { if (x.sur) info.push(x.type + ": 성수기 추가 요금 " + m(x.sur) + " (" + x.surNames.join(", ") + ", " + x.surN + "박)"); if (x.promoN) info.push(x.type + ": 프로모 요금 " + x.promoN + "박 적용"); });
         c.extras.forEach(function (x) { info.push(x.name + ": 성인 " + m(x.adult) + " / 아동 " + m(x.child) + (x.total ? " → " + m(x.total) : " (인원을 넣으면 계산)")); });
+        if (c.hardWarn.length) h += '<p class="warn big" style="margin-top:10px">🚨 ' + c.hardWarn.map(esc).join("<br>🚨 ") + "</p>";
         if (c.minWarn.length) h += '<p class="warn big" style="margin-top:10px">⚠ ' + c.minWarn.map(esc).join("<br>⚠ ") + "</p>";
+        if (c.remarkLines.length) h += '<div class="warn" style="margin-top:10px"><b>추가 인원·조식·아동 요금 등 TMJ 비고(자동 계산되지 않으니 직접 확인해 합산)</b><br>' + c.remarkLines.map(esc).join("<br>") + "</div>";
         if (info.length) h += '<p class="warn" style="margin-top:10px">' + info.map(esc).join("<br>") + "</p>";
         h += '<details style="margin-top:8px"><summary class="note">TMJ 비고 원문(내부 참고 — 최소 숙박·픽업·조식 인원 등)</summary><div class="note pre">' + esc(hh.remark || "없음") + (hh.sur.length ? "\n\n[써차지]\n" + hh.sur.map(function (x) { return x.name + " " + x.from + " ~ " + x.to; }).join("\n") : "") + "</div></details>";
       } else {
