@@ -260,7 +260,7 @@
         if (alts.length) hardWarn.push("같은 숙소의 다른 요금표 중 이 날짜를 포함하고 서차지·갈라 자료가 있는 것: " + alts.join(" / "));
       }
       if (h) (h.remark || "").split(/\n/).forEach(function (ln) { if (/EXTRA|ADDITIONAL|CHILD|BREAKFAST|BFAST|B\/F|ADULT|SURCHARGE|CHARGE|MANDATORY|GALA/i.test(ln) && ln.trim().length > 6) remarkLines.push(ln.trim()); });
-      return { hardWarn: hardWarn, remarkLines: remarkLines, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
+      var rr = state.stay.resort, sig = [rr.hotel, rr.checkin, rr.nights, rr.adults, rr.kids, (rr.picks || []).map(function (q) { return q.type + "x" + q.rooms; }).join(",")].join("|"), needOk = !!(h && (hardWarn.length || remarkLines.length || h.sur.length || h.gala.length || (dates.length && dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; })))); return { hardWarn: hardWarn, remarkLines: remarkLines, needOk: needOk, sig: sig, okDone: needOk && rr.okSig === sig, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
         total: lines.reduce(function (a, x) { return a + x.total; }, 0) + exTotal, profit: lines.reduce(function (a, x) { return a + x.profit; }, 0) };
     },
     resortText: function () {
@@ -552,6 +552,7 @@
       }
       h += "</div>" + '<div class="total" style="margin-top:12px"><small>' + (c.all ? "전체 객실 타입 안내(객실을 고르면 합계가 나옵니다)" : "손님 견적 합계(" + c.nights + "박)") + '</small><div class="big">' + (c.all ? "객실 " + c.lines.length + "종" : m(c.total)) + "</div>" + (c.exTotal ? "<small>이 중 갈라·의무 요금 " + m(c.exTotal) + "</small>" : "") + "</div>" +
         '<div class="profit" style="margin-top:8px">' + (c.all ? "객실 1개·1박당 수익 " + m(c.margin) : "예상 수익 " + m(c.profit)) + " (손님 글에는 나가지 않습니다)</div>" +
+        (c.needOk ? '<label class="warn big" style="display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer"><input type="checkbox" id="okChk" style="width:24px;height:24px"' + (c.okDone ? " checked" : "") + '><span>서차지·갈라 디너·성인/아동 추가금·조식 추가금·연말 날짜를 모두 확인했습니다 (체크해야 견적 복사가 됩니다)</span></label>' : "") +
         '<div class="card" style="margin-top:12px">' + outBox("stay_resort_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.resortAsk()) + outBox("stay_resort", "② 숙소 견적", Stay.resortText()) + "</div>";
     }
     if (st.tab === "villa") {
@@ -724,6 +725,7 @@
     if (d.shop) return go("shop", d.shop);
     if (d.cart) return toggleCart(d.cart);
     if (d.tab) { state.tab = d.tab; return render(); }
+    if (d.copy === "stay_resort" && state.stay.tab === "resort") { var gc = Stay.resort(); if (gc.needOk && !gc.okDone) return toast("먼저 아래 ‘확인했습니다’ 칸을 체크하세요 (서차지·갈라·추가금)"); }
     if (d.copy) return copy($('[data-out="' + d.copy + '"]').value);
     if (d.copytext != null) return copy(d.copytext);
     if (d.reset) { delete state.edited[d.reset]; return render(); }
@@ -785,6 +787,7 @@
   });
   document.addEventListener("change", function (ev) {
     var t = ev.target, d = t.dataset;
+    if (t.id === "okChk") { var oc = Stay.resort(); state.stay.resort.okSig = t.checked ? oc.sig : ""; save(); return render(); }
     if (d.q) { state.cart[+d.e].q[d.q] = +t.value; return refreshQuote(); }
     if (d.k || d.c) return refreshQuote();
     if (t.id === "rate") { state.rate = +t.value || S.pesoRate; return refreshQuote(); }
