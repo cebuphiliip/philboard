@@ -836,8 +836,13 @@
     return h;
   }
   var VIEWS = { paste: viewPaste, shop: viewShop, quote: viewQuote, ledger: viewLedger, stay: viewStay, lib: viewLib, home: viewHome };
+  /* 붙여넣은 손님 글은 화면을 다시 그려도 지워지지 않게 따로 간직한다(이 탭을 닫을 때까지) */
+  var DRAFT_IDS = ["paste", "spaste", "upaste"], DRAFT = {};
+  function draftGet(id) { try { var v = sessionStorage.getItem("pb_draft_" + id); if (v != null) return v; } catch (e) { } return DRAFT[id] || ""; }
+  document.addEventListener("input", function (ev) { var id = ev.target && ev.target.id; if (DRAFT_IDS.indexOf(id) < 0) return; DRAFT[id] = ev.target.value; try { sessionStorage.setItem("pb_draft_" + id, ev.target.value); } catch (e) { } });
   function render() {
     $("#app").innerHTML = (VIEWS[state.view] || viewHome)();
+    DRAFT_IDS.forEach(function (id) { var el = $("#" + id), v = draftGet(id); if (el && v) { el.value = v; var dt = el.closest("details"); if (dt) dt.open = true; } });
     $("#cartCount").textContent = state.cart.length;
     document.querySelectorAll(".top nav button").forEach(function (b) { b.classList.toggle("on", b.dataset.view === state.view || (state.view === "shop" && b.dataset.view === "home")); });
   }
