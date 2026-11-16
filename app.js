@@ -47,7 +47,7 @@
   function fxKrw(n) { return Math.ceil(n * (+state.fx || S.usdRate) / 1000) * 1000; }
   function fxLine(n) { return "→ 원화로 입금하실 경우: 약 " + won(fxKrw(n)) + " (1달러 = " + num(+state.fx || S.usdRate) + "원 기준)\n※ 원화 입금에는 입금하시는 날의 '현찰 살 때' 환율이 적용됩니다. 입금하실 때 정확한 금액을 다시 확인해 드립니다."; }
   function fxInput() {
-    var f = state.fxInfo, why = f.manual ? "직접 넣은 값" : f.mid ? "자동: " + f.date + " 기준환율 " + num(Math.round(f.mid)) + "원 + 현찰 살 때 가산 " + (S.usdSpread * 100) + "% (은행 고시와 몇 원 다를 수 있음)" : "자동 환율을 아직 못 받아 기본값 사용";
+    var f = state.fxInfo, why = f.manual ? "직접 넣은 값" : f.mid ? "자동: " + f.date + " 기준환율 " + num(Math.round(f.mid)) + "원 + 현찰 살 때 가산 " + (Math.round(S.usdSpread * 10000) / 100) + "% (은행 고시와 몇 원 다를 수 있음)" : "자동 환율을 아직 못 받아 기본값 사용";
     return '<div><label>달러 → 원 환산(1달러당 원, 현찰 살 때 환율)</label><input id="fx" type="number" value="' + esc(state.fx) + '"><small class="note" style="display:block;margin-top:4px">' + esc(why) + (f.manual ? ' <button class="btn sm ghost" id="fxAuto">자동 환율로</button>' : "") + "</small></div>";
   }
   /* 하루 한 번 기준환율을 받아 '현찰 살 때' 환율(기준환율 × 1.0175)을 기본값으로 채운다. 직접 넣은 값이 있으면 건드리지 않는다 */
@@ -547,8 +547,8 @@
   function viewPaste() {
     return '<div class="card"><h2 style="margin:0 0 6px">통합 붙여넣기</h2><p class="note" style="margin:0 0 8px">손님이 보낸 카톡 글을 한 번에 붙여넣으면 숙소 견적과 업체 견적 칸을 같이 채웁니다. 숙소 줄(숙소·체크인·객실…)은 숙소 견적으로, <b>■ 업체이름</b> 아래 줄은 그 업체 견적으로 들어갑니다.</p>' +
       '<textarea id="upaste" style="min-height:200px" placeholder="손님이 채워 보낸 예약폼 전체를 그대로 붙여넣으세요"></textarea>' +
-      '<div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doUniParse">내용 읽기</button><button class="btn sm gold" id="doUniAi">AI로 읽기(자유롭게 쓴 글)</button></div>' +
-      '<p class="note" id="uMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다. 읽은 뒤 [숙소]·[견적] 화면에서 날짜·인원·금액을 꼭 확인하세요.</p></div>';
+      '<div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doUniParse">내용 읽기</button></div>' +
+      '<p class="note" id="uMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). 읽은 뒤 [숙소]·[견적] 화면에서 날짜·인원·금액을 꼭 확인하세요.</p></div>';
   }
   function parsePaste(text) {
     var cur = null, hits = 0;
@@ -651,7 +651,7 @@
     var c = Calc.cart(), nums = []; for (var n = 0; n <= 20; n++) nums.push(n);
     var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div>' + (state.cust.useContact || state.cust.contact || state.cart.some(function (e) { return shopById(e.shopId).needContact; }) ? '<div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div>' : "") + '</div>' +
       '<label class="chk"><input type="checkbox" id="useContact"' + (state.cust.useContact ? " checked" : "") + '> 카카오톡 ID·연락처 칸 쓰기(업체가 손님께 직접 연락하는 곳 등 필요할 때만)</label>' +
-      '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button><button class="btn sm gold" id="doAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다.</p></details></div>';
+      '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료).</p></details></div>';
     state.cart.forEach(function (e, i) {
       var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지";
       h += '<div class="card" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
@@ -688,7 +688,7 @@
     var st = state.stay, tabs = [["resort", "리조트·호텔"], ["villa", "풀빌라"], ["sol", "솔타나"]];
     var h = "<h1>숙소 견적</h1>" + '<div class="tabs">' + tabs.map(function (t) { return '<button data-stab="' + t[0] + '" class="' + (st.tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" +
       '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div>" +
-        '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="spaste" placeholder="손님이 채워 보낸 예약폼(또는 자유롭게 쓴 글)을 그대로 붙여넣으세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doStayParse">내용 읽기</button><button class="btn sm gold" id="doStayAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="saiMsg" style="margin:6px 0 0">[내용 읽기]는 우리가 보낸 예약폼 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다. 읽은 뒤 날짜·인원·객실·금액을 꼭 한 번 확인하세요.</p></details></div>';
+        '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="spaste" placeholder="손님이 채워 보낸 예약폼(또는 자유롭게 쓴 글)을 그대로 붙여넣으세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doStayParse">내용 읽기</button></div><p class="note" id="saiMsg" style="margin:6px 0 0">[내용 읽기]는 우리가 보낸 예약폼 양식대로 채운 글을 바로 읽습니다(무료). 읽은 뒤 날짜·인원·객실·금액을 꼭 한 번 확인하세요.</p></details></div>';
     if (st.tab === "resort") {
       var r = st.resort, c = Stay.resort(), hh = c.h, regions = {}, m = function (n) { return Stay.money(n, c.cur); };
       if (c.galaHit) h += '<div style="margin:8px 0;padding:10px 14px;border-radius:10px;background:#7a1f1f;color:#fff;font-weight:700">🎉 갈라 디너 포함 견적 — 아래 갈라 금액이 합계에 들어 있습니다</div>';
@@ -941,7 +941,7 @@
       var ur = parseUnified($("#upaste").value), um = $("#uMsg");
       var line = "숙소 " + ur.stay + "개 · 업체 " + ur.shops + "개 항목을 읽었습니다" + (ur.added.length ? " (견적에 담은 업체: " + ur.added.join(", ") + ")" : "");
       save(); toast(ur.stay + ur.shops ? line : "읽을 수 있는 항목이 없습니다");
-      if (um) um.textContent = (ur.stay + ur.shops ? line + ". [숙소]·[견적] 화면에서 확인하세요." : "읽을 수 있는 항목이 없습니다. 양식(숙소/체크인…, ■ 업체이름)을 확인하거나 [AI로 읽기]를 써 보세요.") + (ur.notes.length ? " 확인 필요: " + ur.notes.join(" / ") : "");
+      if (um) um.textContent = (ur.stay + ur.shops ? line + ". [숙소]·[견적] 화면에서 확인하세요." : "읽을 수 있는 항목이 없습니다. 양식(숙소/체크인…, ■ 업체이름)대로 적혀 있는지 확인하세요.") + (ur.notes.length ? " 확인 필요: " + ur.notes.join(" / ") : "");
       return;
     }
     if (t.id === "doUniAi") {
