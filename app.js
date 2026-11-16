@@ -985,6 +985,7 @@
     var t = ev.target, d = t.dataset;
     if (t.id === "okChk") { var oc = Stay.resort(); state.stay.resort.okSig = t.checked ? oc.sig : ""; save(); return render(); }
     if (d.q) { state.cart[+d.e].q[d.q] = +t.value; return refreshQuote(); }
+    if (d.k && t.tagName === "SELECT") state.cart[+d.e][d.k] = t.value; /* 선택 칸(오전·오후, 짐 유무 등)은 여기서 저장한다 — input 쪽은 글자 칸만 처리 */
     if (d.k || d.c) return refreshQuote();
     if (t.id === "rate") { state.rate = +t.value || S.pesoRate; return refreshQuote(); }
     if (t.id === "fx") { state.fx = +t.value || S.usdRate; state.fxInfo.manual = true; state.edited = {}; save(); return render(); }

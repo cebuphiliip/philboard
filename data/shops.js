@@ -21,7 +21,7 @@
   var cat = function (n) { return "https://cafe.naver.com/freetourincebu/" + n; };
 
   window.PB_DATA = {
-    version: "2026-11-11o",
+    version: "2026-11-16a",
     priceDate: "2026년 11월 10일",
     settings: {
       brand: "투윙스/솔타나",
