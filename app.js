@@ -235,6 +235,26 @@
         }
         return { type: d.type, rooms: s.rooms, night1: d.rate + margin, base: base * s.rooms, sur: sur * s.rooms, surN: surN, surNames: surNames, promoN: promoN, total: (base + sur) * s.rooms, profit: margin * nights * s.rooms };
       });
+      var philco = { rows: [], hot: "", early: "" }, PC = window.PB_PHILCO && h ? window.PB_PHILCO.hotels[h.name] : null;
+      if (PC && dates.length) {
+        philco.hot = PC.hot || "";
+        src.forEach(function (sx) {
+          var d = sx.def, pr = PC.rooms[d.type]; if (pr == null) return;
+          var tm = 0, pp = 0, tsur = 0, anySur = false;
+          dates.forEach(function (dt) {
+            var promo = d.promo && promoSell && h.stay && dt >= h.stay[0] && dt <= h.stay[1];
+            tm += promo ? d.promo : d.rate; pp += pr;
+            var ts = 0; h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type]) ts += x.amt[d.type]; });
+            var ps = ts; if (PC.sur) { ps = 0; PC.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to) ps += x.amt; }); }
+            tm += ts; pp += ps; if (ts || ps) anySur = true;
+          });
+          var row = { type: d.type, rooms: sx.rooms, tmj: tm * sx.rooms, philco: pp * sx.rooms, diff: (tm - pp) * sx.rooms };
+          var dd = r.checkin ? Math.round((new Date(r.checkin) - new Date(td)) / 86400000) : -1;
+          if (PC.early && PC.early[d.type] != null && dd >= (PC.earlyDays || 45) && !anySur) { var pe = PC.early[d.type] * dates.length * sx.rooms; row.early = pe; row.earlyDiff = row.tmj - pe; }
+          if (row.diff > 0 || row.earlyDiff > 0) philco.rows.push(row);
+        });
+        if (philco.rows.some(function (x) { return x.early; })) philco.early = PC.earlyNote;
+      }
       var extras = [], infos = [];
       var ages = String(r.kidAges || "").split(/[^0-9]+/).filter(Boolean).map(Number), agesKnown = kids > 0 && ages.length === kids, ageUnknown = kids > 0 && !agesKnown;
       function cnt(lo, hi) { if (!kids) return 0; if (!agesKnown) return kids; return ages.filter(function (a) { return a >= lo && a <= hi; }).length; }
@@ -254,17 +274,19 @@
       var checks = []; if (r.reqNote) infos.push("손님 요청사항: " + r.reqNote);
       if (ageUnknown) checks.push("아동 나이가 입력되지 않았습니다 — 갈라·의무식·아동 조식은 아동 나이로 대상이 갈립니다. 지금은 아동 전원 대상으로 계산했으니 나이를 넣어 확인하세요.");
       if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) checks.push(x.note); });
+      if (h && dates.length) (ST.dateChecks || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && x.ranges.some(function (rg) { return dates.some(function (dt) { return dt >= rg[0] && dt <= rg[1]; }); })) checks.push(x.note); });
       if (h && extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; })) {
         if (/TBA|TO BE ADVIS/i.test(h.remark || "")) checks.push("갈라 디너 체크요망: TMJ 비고에 금액·내용이 미정(TBA)으로 표기돼 있습니다. 갈라디너 내용을 숙소에 확인하세요.");
         if (kids && h.gala.some(function (g) { return !g.child; })) checks.push("갈라 디너 체크요망: 아동 갈라 금액이 표에 없습니다(0으로 계산됨). 아동 갈라 요금을 숙소에 확인하세요.");
         if (h.gala.some(function (g) { return g.child > 0 && g.child > g.adult; })) checks.push("갈라 디너 체크요망: 아동 금액이 성인보다 큽니다. 자료 오류일 수 있어 확인하세요.");
       }
       if (h && pk) {
+        var pkcbf = pk.cbf; if (pkcbf == null) (ST.cbfDefault || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) pkcbf = x.cbf; });
         if (h.cbfAge && kids && !extras.some(function (x) { return x.name.indexOf("아동 조식") >= 0; })) {
-          if (pk.cbf != null) {
+          if (pkcbf != null) {
             var cc = cnt(h.cbfAge[0], h.cbfAge[1]);
-            if (pk.cbf > 0 && cc) extras.push({ name: "아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세, 사전결제) " + cc + "명 × " + nights + "박", adult: 0, child: pk.cbf, total: cc * pk.cbf * nights, note: "아동 조식은 엑스트라 베드와 별도 요금" });
-            else if (pk.cbf === 0) infos.push("아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세)은 무료입니다.");
+            if (pkcbf > 0 && cc) extras.push({ name: "아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세, 사전결제) " + cc + "명 × " + nights + "박", adult: 0, child: pkcbf, total: cc * pkcbf * nights, note: "아동 조식은 엑스트라 베드와 별도 요금" });
+            else if (pkcbf === 0) infos.push("아동 조식(만 " + h.cbfAge[0] + "~" + h.cbfAge[1] + "세)은 무료입니다.");
           } else checks.push("이 객실은 TMJ에 아동 조식 요금 표기가 없어 합계에 넣지 못했습니다 — 숙소에 확인하세요.");
         }
         if (ebn) {
@@ -292,7 +314,7 @@
         if (alts.length) hardWarn.push("같은 숙소의 다른 요금표 중 이 날짜를 포함하고 서차지·갈라 자료가 있는 것: " + alts.join(" / "));
       }
       if (h) (h.remark || "").split(/\n/).forEach(function (ln) { if (/EXTRA|ADDITIONAL|CHILD|BREAKFAST|BFAST|B\/F|ADULT|SURCHARGE|CHARGE|MANDATORY|GALA/i.test(ln) && ln.trim().length > 6) remarkLines.push(ln.trim()); });
-      var rr = state.stay.resort, sig = [rr.hotel, rr.checkin, rr.nights, rr.adults, rr.kids, rr.kidAges, rr.ebn, (rr.picks || []).map(function (q) { return q.type + "x" + q.rooms; }).join(",")].join("|"), needOk = !!(h && (checks.length || hardWarn.length || remarkLines.length || h.sur.length || h.gala.length || (dates.length && dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; })))); return { checks: checks, galaHit: extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; }), infos: infos, hardWarn: hardWarn, remarkLines: remarkLines, needOk: needOk, sig: sig, okDone: needOk && rr.okSig === sig, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
+      var rr = state.stay.resort, sig = [rr.hotel, rr.checkin, rr.nights, rr.adults, rr.kids, rr.kidAges, rr.ebn, (rr.picks || []).map(function (q) { return q.type + "x" + q.rooms; }).join(",")].join("|"), needOk = !!(h && (checks.length || hardWarn.length || remarkLines.length || h.sur.length || h.gala.length || (dates.length && dates.some(function (dt) { var md = dt.slice(5); return md >= "12-20" || md <= "01-05"; })))); return { philco: philco, checks: checks, galaHit: extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; }), infos: infos, hardWarn: hardWarn, remarkLines: remarkLines, needOk: needOk, sig: sig, okDone: needOk && rr.okSig === sig, h: h, lines: lines, all: all, nights: nights, margin: margin, cur: cur, adults: adults, kids: kids, extras: extras, exTotal: exTotal, minWarn: minWarn, dated: !!dates.length,
         total: lines.reduce(function (a, x) { return a + x.total; }, 0) + exTotal, profit: lines.reduce(function (a, x) { return a + x.profit; }, 0) };
     },
     resortText: function () {
@@ -684,6 +706,9 @@
         if (!r.checkin) info.push("체크인 날짜를 넣어야 성수기 추가 요금·갈라 디너가 계산됩니다.");
         c.lines.forEach(function (x) { if (x.sur) info.push(x.type + ": 성수기 추가 요금 " + m(x.sur) + " (" + x.surNames.join(", ") + ", " + x.surN + "박)"); if (x.promoN) info.push(x.type + ": 프로모 요금 " + x.promoN + "박 적용"); });
         c.extras.forEach(function (x) { info.push(x.name + ": " + (x.adult ? "성인 " + m(x.adult) : "") + (x.child ? (x.adult ? " / " : "") + "아동 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : " (인원을 넣으면 계산)")); });
+        if (c.philco && (c.philco.rows.length || c.philco.hot)) h += '<div class="card" style="margin-top:12px;border:2px solid #0a8a5a;background:#eafbf3"><b style="color:#0a8a5a">💰 ' + (c.philco.rows.length ? "필코가 TMJ보다 더 쌉니다 — 예약은 필코로 (차액이 투윙스 수익)" : "필코 안내") + '</b><span style="color:#066"> (마크업 전 원가 · ' + c.nights + '박 기준 · 손님 글에는 나가지 않음)</span>' +
+          c.philco.rows.map(function (x) { return "<br>• " + esc(x.type) + (x.rooms > 1 ? " ×" + x.rooms + "객실" : "") + ": TMJ " + m(x.tmj) + " / 필코 " + m(x.philco) + (x.diff > 0 ? " → <b>" + m(x.diff) + " 절감</b>" : " → 같거나 TMJ가 쌈") + (x.early ? "<br>&nbsp;&nbsp;&nbsp;필코 얼리버드 적용 시 " + m(x.early) + " → <b>" + m(x.earlyDiff) + " 절감</b>" : ""); }).join("") +
+          (c.philco.early ? "<br><span style='font-size:12px'>※ " + esc(c.philco.early) + "</span>" : "") + (c.philco.hot ? "<br><b>" + esc(c.philco.hot) + "</b>" : "") + "<br><span style='font-size:12px'>※ 비교값은 TMJ 자료(" + esc(window.PB_HOTELS.date) + ")와 필코 표(" + esc(window.PB_PHILCO.date) + ") 기준 — 예약 전에 두 곳 현행가를 한 번 더 확인하세요.</span></div>";
         if (c.hardWarn.length) h += '<p class="warn big" style="margin-top:10px">🚨 ' + c.hardWarn.map(esc).join("<br>🚨 ") + "</p>";
         if (c.infos.length) h += '<p class="warn" style="margin-top:10px">ℹ ' + c.infos.map(esc).join("<br>ℹ ") + "</p>";
         if (c.minWarn.length) h += '<p class="warn big" style="margin-top:10px">⚠ ' + c.minWarn.map(esc).join("<br>⚠ ") + "</p>";
@@ -727,7 +752,7 @@
         '<div class="total" style="margin-top:12px"><small>합계 (' + sc.tier.name + ')</small><div class="big">' + usd(sc.total) + "</div><small>객실 " + usd(sc.room) + (sc.extra ? " + 추가 인원 " + usd(sc.extra) : "") + " · 원화 약 " + won(sc.krw) + " (현찰 살 때 환율 적용)</small></div>" +
         '<div class="card" style="margin-top:12px">' + outBox("sol_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.solAsk()) + outBox("sol_quote", "② 금액 안내", Stay.solText()) + "</div>";
     }
-    return h + '<div class="row" style="margin-top:12px"><button class="btn gold grow" id="saveStay">이 숙소 견적을 장부에 저장</button></div>';
+    return h + '<div class="row" style="margin-top:12px"><button class="btn gold grow" id="saveStay">이 숙소 견적을 장부에 저장</button></div>' + '<div class="row" style="margin-top:10px"><button class="btn grow" data-view="philco">💰 필코가 더 싼 숙소 목록 (연말 문의용)</button></div>';
   }
 
   /* ---------- 자료실 ---------- */
@@ -835,7 +860,38 @@
       '<p class="note" style="margin-top:14px">장부는 이 기기의 브라우저에 저장되고, 로그인하면 다른 기기와 합쳐집니다. <button class="btn sm ghost" id="exportBk">백업 파일 내려받기</button></p>';
     return h;
   }
-  var VIEWS = { paste: viewPaste, shop: viewShop, quote: viewQuote, ledger: viewLedger, stay: viewStay, lib: viewLib, home: viewHome };
+  /* ---------- 필코가 더 싼 숙소 목록 (연말 문의용 한 페이지) ---------- */
+  function viewPhilco() {
+    var P = window.PB_PHILCO, td = today(), cheap = [], same = [];
+    Object.keys(P.hotels).forEach(function (name) {
+      var pc = P.hotels[name], h = H.hotels.filter(function (x) { return x.name === name; })[0]; if (!h) return;
+      var promoNow = h.sell && td >= h.sell[0] && td <= h.sell[1], rows = [];
+      Object.keys(pc.rooms).forEach(function (t) {
+        var d = h.rooms.filter(function (x) { return x.type === t; })[0]; if (!d) return;
+        var tm = promoNow && d.promo ? d.promo : d.rate, diff = tm - pc.rooms[t];
+        rows.push({ type: t, tmj: tm, philco: pc.rooms[t], diff: diff, promo: promoNow && d.promo, early: pc.early && pc.early[t] != null ? pc.early[t] : null, cur: d.cur });
+      });
+      var win = rows.filter(function (x) { return x.diff > 0; }), rest = rows.filter(function (x) { return x.diff <= 0; });
+      if (win.length) cheap.push({ name: name, ko: pc.ko || name, rows: win, rest: rest, hot: pc.hot, early: pc.earlyNote, surNote: pc.sur ? "필코 서차지가 TMJ와 달라(바이: 12/23~25 추가) 날짜별 비교는 견적 화면에서 확인" : "", max: Math.max.apply(null, win.map(function (x) { return x.diff; })), cur: rows[0].cur });
+      else same.push({ ko: pc.ko || name, rows: rest });
+    });
+    cheap.sort(function (a, b) { return (b.cur === "USD" ? 0 : 1) - (a.cur === "USD" ? 0 : 1) || b.max - a.max; });
+    var m = function (n, c) { return c === "USD" ? usd(n) : peso(n); };
+    var h = '<h1 style="margin:6px 0">필코가 더 싼 숙소 목록</h1><p class="note">1박 룸+조식 · 성인 2인 · 마크업 전 원가 · TMJ ' + esc(H.date) + ' / 필코 ' + esc(P.date) + ' 기준. 연말 서차지·갈라는 대부분 TMJ와 같아 객실 요금 차이가 그대로 총액 차이입니다(날짜별 정확한 차액은 숙소 견적 화면의 초록 박스). 손님에게는 보이지 않는 내부용입니다.</p>';
+    h += '<div class="card" style="margin-top:10px"><b>한눈에 — 필코로 넣으면 이득인 숙소</b><br>' + cheap.map(function (c) { return esc(c.ko) + " <b>최대 " + m(c.max, c.cur) + "↓</b>"; }).join(" · ") + "</div>";
+    cheap.forEach(function (c) {
+      h += '<div class="card" style="margin-top:12px;border:2px solid #0a8a5a"><b style="font-size:17px">' + esc(c.ko) + "</b>" +
+        '<table style="width:100%;margin-top:8px;border-collapse:collapse;font-size:14px"><tr style="text-align:left;color:#666"><th>객실</th><th>TMJ</th><th>필코</th><th>차액/박</th></tr>' +
+        c.rows.map(function (x) { return '<tr style="border-top:1px solid #ddd"><td>' + esc(x.type) + "</td><td>" + m(x.tmj, x.cur) + "</td><td>" + m(x.philco, x.cur) + '</td><td style="color:#0a8a5a"><b>' + m(x.diff, x.cur) + "↓</b></td></tr>" + (x.early != null ? '<tr><td colspan="4" style="font-size:12px;color:#066">└ 얼리버드(체크인 45일 전·비수기 날짜) ' + m(x.early, x.cur) + " → " + m(x.tmj - x.early, x.cur) + "↓</td></tr>" : ""); }).join("") + "</table>" +
+        (c.rest.length ? '<details style="margin-top:6px"><summary class="note">같거나 TMJ가 싼 객실 ' + c.rest.length + "개</summary><div class='note'>" + c.rest.map(function (x) { return esc(x.type) + ": TMJ " + m(x.tmj, x.cur) + " / 필코 " + m(x.philco, x.cur); }).join("<br>") + "</div></details>" : "") +
+        (c.hot ? '<p class="warn" style="margin-top:8px"><b>' + esc(c.hot) + "</b></p>" : "") + (c.early ? '<p class="note">※ ' + esc(c.early) + "</p>" : "") + (c.surNote ? '<p class="note">※ ' + esc(c.surNote) + "</p>" : "") + "</div>";
+    });
+    h += '<div class="card" style="margin-top:12px"><b>TMJ가 같거나 더 싼 숙소(필코로 넣지 않음)</b><br>' + same.map(function (c) { return esc(c.ko); }).join(", ") + '<p class="note">크림슨·필리·누스타·솔레아 프리미어(프로모)·제이파크 디럭스도 TMJ 쪽이 같거나 싸서 목록에서 뺐습니다(상세는 비교 문서 B절).</p></div>';
+    h += '<div class="card" style="margin-top:12px"><b>필코에만 있는 상품</b><p class="note">• 비비안(VIVIEN\'S): TMJ에 없음, 룸온리 2,100 / 룸+조식 2,450페소 · • 샹그릴라 코리안 패키지(3~5박, 다이닝 크레딧 5,000/7,500/10,000) · • 바이 밤 12시 체크인 요금(첫날만) · • 제이파크 갈라 밤 도착 웨이버(항공편명 필수)</p></div>';
+    h += '<p class="note" style="margin-top:10px">조건 차이(서차지·갈라·아동 연령)는 references/필코_TMJ_요금비교_2026-11-16.md D절. 예약 전에는 필코·TMJ 현행가를 한 번 더 확인하세요.</p>';
+    return '<button class="btn sm ghost" data-view="stay">← 숙소 견적</button>' + h;
+  }
+  var VIEWS = { philco: viewPhilco, paste: viewPaste, shop: viewShop, quote: viewQuote, ledger: viewLedger, stay: viewStay, lib: viewLib, home: viewHome };
   /* 붙여넣은 손님 글은 화면을 다시 그려도 지워지지 않게 따로 간직한다(이 탭을 닫을 때까지) */
   var DRAFT_IDS = ["paste", "spaste", "upaste"], DRAFT = {};
   function draftGet(id) { try { var v = sessionStorage.getItem("pb_draft_" + id); if (v != null) return v; } catch (e) { } return DRAFT[id] || ""; }
