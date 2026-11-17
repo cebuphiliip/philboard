@@ -337,7 +337,7 @@
           { key: "adult", label: "성인(세트메뉴 1인)", off: null, sp: { dep: 0, on: 800, allPre: true }, net: { on: 500 } },
           { key: "child", label: "소아(만 2~11세, 50% 할인)", off: null, sp: { dep: 0, on: 400, allPre: true }, net: { on: 250 } }
         ] },
-      { id: "show", name: "어메이징쇼", cat: "식당·공연·촬영", form: "show", timeOptions: ["1부쇼", "2부쇼"],
+      { id: "show", name: "어메이징쇼", cat: "식당·공연·촬영", form: "show", noPickup: true, timeOptions: ["1부쇼", "2부쇼"],
         afterText: "★ 어메이징쇼 예약이 완료되었습니다.\n티켓은 이용하실 솔타나 객실 안 테이블 위에 올려 두고, 미리 사진을 찍어 보내 드리겠습니다.",
         tagline: "세부에서 가장 핫한 관객 참여형 뮤지컬 쇼.",
         post: cat(981),

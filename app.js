@@ -125,7 +125,7 @@
           t += "인원: " + shop.items.map(function (it) { return it.label + " " + (e.q[it.key] || "") + unitOf(it); }).join(" / ") + "\n";
           t += "아동 만 나이: " + e.ages + "\n";
         }
-        t += "픽업 장소: " + e.pickup + "\n" + (mas ? "픽업 희망 시간: " + e.time + "\n" : "") + "드랍 장소: " + e.drop + "\n요청 사항: " + e.note + "\n";
+        t += (shop.noPickup ? "" : "픽업 장소: " + e.pickup + "\n" + (mas ? "픽업 희망 시간: " + e.time + "\n" : "") + "드랍 장소: " + e.drop + "\n") + "요청 사항: " + e.note + "\n";
         if (shop.form === "clubcebu" || shop.form === "lokal") t += "예약자 전원 영문 이름·생년월일" + (shop.form === "clubcebu" ? "·성별" : "") + ": " + e.roster + "\n";
         if (shop.askNote) t += "\n" + shop.askNote + "\n";
       });
@@ -420,6 +420,14 @@
       return y + "-" + pad(m[1]) + "-" + pad(m[2]);
     }
     if ((m = /(?:^|\D)(\d{2})(\d{2})(\d{2})(?:\D|$)/.exec(s))) return "20" + m[1] + "-" + m[2] + "-" + m[3];
+    /* 월일 붙여쓰기: "1120", "1120일", "120일"(=1월 20일) — 월 1~12·일 1~31 이 맞을 때만 */
+    if ((m = /(?:^|\D)(\d{2})(\d{2})\s*일?(?:\D|$)/.exec(s)) || (m = /(?:^|\D)(\d)(\d{2})\s*일(?:\D|$)/.exec(s))) {
+      var mo = +m[1], dd = +m[2];
+      if (mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) {
+        var y2 = now.getFullYear(); if (new Date(y2, mo - 1, dd) < new Date(now.getFullYear(), now.getMonth(), now.getDate())) y2++;
+        return y2 + "-" + pad(mo) + "-" + pad(dd);
+      }
+    }
     return "";
   }
   /* 손님 글에서 메뉴·수량 읽기: "아로마 90분 2명, 키즈 60분 1명" → 메뉴 이름의 낱말과 분(시간)이 맞는 품목에 수량을 넣는다 */
@@ -660,7 +668,7 @@
         '<div style="margin:10px 0">' + menuPick(s, e, i) + (s.items.length > 5 ? s.items.filter(function (it) { return e.q[it.key] > 0; }) : s.items).map(function (it) {
           return '<div class="qty"><span>' + esc(it.label) + "<small>" + priceStr(it.sp) + '</small></span><select data-e="' + i + '" data-q="' + it.key + '">' + nums.map(function (x) { return "<option" + (x === Number(e.q[it.key] || 0) ? " selected" : "") + ">" + x + "</option>"; }).join("") + "</select></div>";
         }).join("") + "</div>" +
-        '<div class="grid2">' + (mas ? "" : field(e, i, "ages", "아동 만 나이")) + field(e, i, "pickup", "픽업 장소") + (mas ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"]) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + "</div>" +
+        '<div class="grid2">' + (mas ? "" : field(e, i, "ages", "아동 만 나이")) + (s.noPickup ? "" : field(e, i, "pickup", "픽업 장소") + (mas ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"])) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + "</div>" +
         (s.form === "clubcebu" || s.form === "lokal" ? '<div style="margin-top:10px"><label>예약자 전원 영문이름·생년월일' + (s.form === "clubcebu" ? "·성별" : "") + '</label><textarea data-e="' + i + '" data-k="roster" style="min-height:70px">' + esc(e.roster) + "</textarea></div>" : "") +
         '<div style="margin-top:10px"><label>특이사항(직접 입력)</label><textarea data-e="' + i + '" data-k="note" style="min-height:60px">' + esc(e.note) + "</textarea></div>" +
         (s.needContact && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
