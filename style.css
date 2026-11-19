@@ -7,7 +7,7 @@ button{cursor:pointer}
 .top{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top))}
 .brand{display:flex;align-items:center;gap:10px;background:none;border:0;color:#fff;font-weight:800;font-size:18px;padding:0;text-align:left}
 .brand small{display:block;font-size:9px;letter-spacing:.24em;color:var(--gold2);font-weight:600}
-.mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#E8D5A3,#B8892B);color:var(--navy);display:grid;place-items:center;font-family:Georgia,serif;font-size:20px}
+.mark{width:34px;height:34px;display:block;flex:0 0 auto}
 .top nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
 .top nav button{white-space:nowrap;flex:none}
 .top nav button{background:none;border:0;color:#C9D0E0;padding:8px 10px;border-radius:10px;font-size:14px;font-weight:600}
