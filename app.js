@@ -282,7 +282,7 @@
       var pk = h && r.picks && r.picks[0] ? h.rooms.filter(function (x) { return x.type === r.picks[0].type; })[0] : null, ebn = Math.max(0, +r.ebn || 0);
       var checks = []; if (r.reqNote) infos.push("손님 요청사항: " + r.reqNote);
       if (ageUnknown) checks.push("아동 나이가 입력되지 않았습니다 — 갈라·의무식·아동 조식은 아동 나이로 대상이 갈립니다. 지금은 아동 전원 대상으로 계산했으니 나이를 넣어 확인하세요.");
-      if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0) checks.push(x.note); });
+      if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && (!x.rooms || ((r.picks || []).length ? r.picks : h.rooms).some(function (q) { return x.rooms.indexOf(q.type) >= 0; }))) checks.push(x.note); }); // rooms: 그 객실을 고른 견적에만(객실을 안 고르면 전체 객실이 나가므로 그 숙소에 해당 객실이 있으면)
       if (h && dates.length) (ST.dateChecks || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && x.ranges.some(function (rg) { return dates.some(function (dt) { return dt >= rg[0] && dt <= rg[1]; }); })) checks.push(x.note); });
       if (h && extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; })) {
         if (/TBA|TO BE ADVIS/i.test(h.remark || "")) checks.push("갈라 디너 체크요망: TMJ 비고에 금액·내용이 미정(TBA)으로 표기돼 있습니다. 갈라디너 내용을 숙소에 확인하세요.");
@@ -324,7 +324,7 @@
       }
       var hardWarn = [], remarkLines = [];
       lines.forEach(function (x) {
-        if (x.dynN) hardWarn.push("'" + x.type + "'은(는) TMJ에 정해진 요금이 없는 다이나믹 요금입니다 — " + x.dynN + "박분 객실 요금이 합계에 빠져 있습니다. TMJ에서 그 날짜 요금을 확인해 직접 넣으세요(손님 글에는 '요금 확인 후 안내'로 나갑니다).");
+        if (x.dynN) checks.push("다이나믹 요금 체크요망: '" + x.type + "'은(는) TMJ에 정해진 요금이 없습니다 — " + x.dynN + "박분 객실 요금이 합계에 빠져 있습니다. TMJ에 로그인해 그 날짜 요금을 확인하고 견적에 넣으세요(손님 글에는 '요금 확인 후 안내'로 나갑니다).");
         if (x.pkgN && x.pkgN !== nights) hardWarn.push("'" + x.type + "'은(는) " + x.pkgN + "박 패키지 요금입니다(지금 " + nights + "박) — 합계는 1박 환산값이라 맞지 않습니다. 박수를 " + x.pkgN + "박으로 맞추거나 다른 객실을 고르세요.");
         if (x.nextN) infos.push(x.type + ": " + x.nextN + "박은 다음 요금 기간(" + h.next[0] + " ~ " + h.next[1] + ") 요금을 적용했습니다.");
       });
