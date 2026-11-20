@@ -112,7 +112,7 @@
       var t = "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n\n";
       t += state.cart.map(function (e) { return Text.intro(shopById(e.shopId)); }).join("\n\n");
       t += "\n\n정확한 견적과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n";
-      t += "대표자 성함: " + state.cust.name + "\n" + (state.cart.some(function (e) { return showContact(shopById(e.shopId)); }) ? "카카오톡 ID 또는 연락처: " + state.cust.contact + "\n" : "");
+      t += "대표자 성함: " + state.cust.name + "\n" + (state.cart.some(function (e) { return showContact(shopById(e.shopId)); }) ? "카카오톡 ID 또는 연락처: " + state.cust.contact + "\n" : "") + "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): \n";
       state.cart.forEach(function (e) {
         var shop = shopById(e.shopId), mas = shop.cat === "마사지";
         t += "\n■ " + shop.name + "\n이용 날짜: " + dateKo(e.date) + "\n";
@@ -373,13 +373,13 @@
           "객실 타입: " + (picked ? c.lines.map(function (x) { return x.type; }).join(", ") : ""), "객실 수: " + (picked ? c.lines.map(function (x) { return x.rooms + "객실"; }).join(", ") : ""),
           "인원(성인 / 아동): " + (r.checkin || picked ? "성인 " + c.adults + "명" + (c.kids ? " / 아동 " + c.kids + "명" : "") : ""),
           "아동 나이(만 나이, 아동별로 · 없으면 '없음'): " + (r.kidAges ? r.kidAges.split(/[^0-9]+/).filter(Boolean).map(function (n) { return n + "세"; }).join(", ") : ""),
-          "대표자 영문 성함(여권과 동일): ", "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "요청 사항(침대 타입·공항 픽업 등): "].join("\n");
+          "대표자 영문 성함(여권과 동일): ", "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "요청 사항(침대 타입·공항 픽업 등): ", "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): "].join("\n");
     },
     villaAsk: function () {
       var v = state.stay.villa, c = Stay.villa();
       return "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n" +
         ["풀빌라: " + c.d.name + " (" + c.d.rooms + ")", "체크인 날짜: " + dateKo(v.checkin), "박수: " + c.nights + "박", "인원(성인 / 아동은 만 나이): ", "대표자 성함: " + (state.stay.cust.name || ""),
-          "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "도착 항공편·도착 시간: ", "요청 사항(조식·바비큐·공항 픽업 등): "].join("\n");
+          "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "도착 항공편·도착 시간: ", "요청 사항(조식·바비큐·공항 픽업 등): ", "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): "].join("\n");
     },
     villa: function () {
       var v = state.stay.villa, d = ST.villas[+v.idx] || ST.villas[0], nights = Math.max(1, +v.nights || 1), profit = +v.profit || 0;
@@ -417,8 +417,9 @@
     },
     solNote: function () { var s = state.stay.sol, c = Stay.sol(); return [ST.soltanaNote, c.beds ? "퀸사이즈 엑스트라베드 " + c.beds + "개 포함" : "", s.note].filter(Boolean).join(". "); },
     solAsk: function () {
-      var s = state.stay.sol, c = Stay.sol(), L = [["☝투숙타입&체크인날짜", c.p.name + (s.checkin ? " / " + dateKo(s.checkin) : "")], ["☝이용항공편명", s.flight], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝대표자 영문성함", s.ename]];
+      var s = state.stay.sol, c = Stay.sol(), L = [[c.hasIn ? "☝투숙타입&한국 출발 날짜(입국팩은 세부 도착일이 아니라 한국에서 출발하는 날)" : "☝투숙타입&체크인날짜", c.p.name + (s.checkin ? " / " + dateKo(s.checkin) : "")], ["☝이용항공편명", s.flight], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝대표자 영문성함", s.ename]];
       c.p.times.forEach(function (label, i) { L.push(["☝" + label, i ? s.t2 : s.t1]); });
+      L.push(["☝어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등)", ""]);
       L.push(["☝특이사항", Stay.solNote()]);
       return "안녕하세요, 솔타나콘도텔입니다. 문의해 주셔서 감사합니다.\n예약을 도와드릴 수 있도록 아래 내용을 채워서 보내 주시기 바랍니다.\n\n" + L.map(function (l) { return l[0] + ": " + (l[1] || ""); }).join("\n");
     },
@@ -786,7 +787,7 @@
       h += '<div class="card" style="margin-top:10px"><h2>솔타나콘도텔</h2>' +
         '<div class="scroll"><table><tr><th>요금</th>' + [["in", "입국팩"], ["out", "출국팩"], ["inout", "입국팩+출국팩"], ["room", "룸온리 1박"]].map(function (x) { return "<th>" + x[1] + "</th>"; }).join("") + "</tr>" + ST.soltanaTiers.map(function (t) { return "<tr><td>" + (t.key === sc.tier.key ? "<b>" + t.name + " ✓</b>" : t.name) + "</td>" + [["in", "입국팩"], ["out", "출국팩"], ["inout", "입국팩+출국팩"], ["room", "룸온리 1박"]].map(function (x) { return '<td class="' + (t.key === sc.tier.key && (x[0] === sc.p.pack || (x[0] === "room" && sc.p.room)) ? "sp" : "off") + '">' + t.price[x[0]] + "</td>"; }).join("") + "</tr>"; }).join("") + '</table></div><p class="note">단위: 달러, 객실당(룸온리는 1박당). 기준 인원 성인 2 + 아동 2.</p>' +
         '<div class="grid2">' + sSelect(["sol", "tier"], "적용 요금", ST.soltanaTiers.map(function (t) { return [t.key, t.name]; })) + sSelect(["sol", "key"], "투숙 타입", ST.soltana.map(function (x) { return [x.key, x.name]; })) +
-        sInput(["sol", "checkin"], "체크인 날짜", "date") + sSelect(["sol", "rooms"], "객실 수", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return [n, n + "객실"]; })) + (sc.p.room ? sSelect(["sol", "nights"], "룸온리 박수", [1, 2, 3, 4, 5, 6].map(function (n) { return [n, n + "박"]; })) : "") + 
+        sInput(["sol", "checkin"], sc.hasIn ? "한국 출발 날짜(입국팩 날짜 — 세부 도착일 아님)" : "체크인 날짜", "date") + sSelect(["sol", "rooms"], "객실 수", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return [n, n + "객실"]; })) + (sc.p.room ? sSelect(["sol", "nights"], "룸온리 박수", [1, 2, 3, 4, 5, 6].map(function (n) { return [n, n + "박"]; })) : "") + 
         sSelect(["sol", "addAdult"], "성인 추가(입국팩 20·룸온리 1박 15·출국팩 20달러)", range(0, 10)) + sSelect(["sol", "addKid"], "아동 추가 만 7~11세(입국팩만 15달러, 그 외 무료)", range(0, 10)) + sSelect(["sol", "addBaby"], "만 7세 미만 아동(무료, 엑베·조식 미포함)", range(0, 10)) + sSelect(["sol", "kidBed"], "아이 엑스트라베드 따로 요청(입국팩 만 6세 이하·출국팩 아동, 팩마다 10달러)", range(0, 10)) +
         (sc.p.room ? sSelect(["sol", "bfPax"], "룸온리 조식 추가(1인 1박 " + ST.soltanaAdd.room.breakfast + "달러)", range(0, 10)) : "") + sInput(["sol", "totalPax"], "총 인원(객실당 최대 " + ST.soltanaMaxPax + "명 확인용)", "number", ' min="1"') +
         sInput(["sol", "flight"], "이용 항공편명") + sInput(["sol", "pax"], "각 방 인원 구성(아동 만 나이)") + sInput(["sol", "ename"], "대표자 영문 성함") + sc.p.times.map(function (label, i) { return sInput(["sol", i ? "t2" : "t1"], label); }).join("") + "</div>" +
