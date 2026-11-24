@@ -345,6 +345,13 @@
     if (/^CUBE ?9/.test(n) && /TWO BED SUITE|POOL VILLA/.test(u)) return 2;
     return 1;
   }
+  // 특별요금(ST.specialRates — 제이파크 3박 특별요금 등, 감사 PB-D-20): 견적 날짜(td)가 판매기간 안, 투숙일(dt)이 투숙기간 안, minN 박 이상일 때 그 객실의 마크업 전 1박 요금
+  function spRule(h) { var o = null; if (h) (ST.specialRates || []).forEach(function (x) { if (h.name.indexOf(x.match) === 0) o = x; }); return o; }
+  function spRate(h, type, dt, nights, td) {
+    var x = spRule(h); if (!x || x.rates[type] == null || nights < (x.minN || 1) || !(td >= x.sell[0] && td <= x.sell[1])) return null;
+    if (dt && !(dt >= x.stay[0] && dt <= x.stay[1])) return null;
+    return x.rates[type];
+  }
   var Stay = {
     hotel: function () {
       var r = state.stay.resort, i = r.hotel; if (i === "" || i == null) return null;
@@ -363,16 +370,18 @@
       else src = r.rows.filter(function (x) { return +x.tmj > 0; }).map(function (x) { return { def: { type: x.type, rate: +x.tmj }, rooms: Math.max(1, +x.rooms || 1) }; });
       var promoSell = h && h.sell && td >= h.sell[0] && td <= h.sell[1];
       var lines = src.map(function (s) {
-        var d = s.def, base = 0, sur = 0, surN = 0, promoN = 0, nextN = 0, dynN = 0, surNames = [], pkN = d.pkgN || 1, minOk = !d.promoMinN || nights >= d.promoMinN, bd = h ? bedsOf(h, d.type) : 1, mg = margin * bd;
+        var d = s.def, base = 0, sur = 0, surN = 0, promoN = 0, nextN = 0, dynN = 0, spN = 0, surNames = [], pkN = d.pkgN || 1, minOk = !d.promoMinN || nights >= d.promoMinN, bd = h ? bedsOf(h, d.type) : 1, mg = margin * bd;
         for (var i = 0; i < nights; i++) {
           var dt = dates[i], promo = d.promo && minOk && promoSell && dt && h.stay && dt >= h.stay[0] && dt <= h.stay[1];
           var nx = !promo && h && h.next && dt && dt >= h.next[0] && dt <= h.next[1] && (d.next != null || d.nextDyn);
-          if (!promo && (nx ? d.nextDyn : d.dyn)) dynN++;
-          base += (promo ? d.promo : nx ? (d.next || 0) : (d.rate || 0)) / pkN + mg; if (promo) promoN++; if (nx) nextN++;
+          var rv = promo ? d.promo : nx ? (d.next || 0) : (d.rate || 0), dy = !promo && (nx ? d.nextDyn : d.dyn), sp = h && dt && !d.pkgN ? spRate(h, d.type, dt, nights, td) : null;
+          if (sp != null && (dy || sp < rv)) { rv = sp; spN++; promo = false; nx = false; dy = false; } // 특별요금이 그 날 요금보다 쌀 때만(써차지는 아래에서 그대로 붙음)
+          if (dy) dynN++;
+          base += rv / pkN + mg; if (promo) promoN++; if (nx) nextN++;
           if (h && dt) h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0)) { sur += x.amt[d.type] / pkN; surN++; if (surNames.indexOf(x.name) < 0) surNames.push(x.name); } });
         }
         base = Math.round(base); sur = Math.round(sur);
-        return { type: d.type, rooms: s.rooms, beds: bd, night1: Math.round((d.rate || 0) / pkN) + mg, base: base * s.rooms, sur: sur * s.rooms, surN: surN, surNames: surNames, promoN: promoN, nextN: nextN, dynN: dynN, pkgN: d.pkgN || 0, total: (base + sur) * s.rooms, profit: mg * nights * s.rooms };
+        return { type: d.type, rooms: s.rooms, beds: bd, night1: Math.round((d.rate || 0) / pkN) + mg, base: base * s.rooms, sur: sur * s.rooms, surN: surN, surNames: surNames, promoN: promoN, nextN: nextN, dynN: dynN, spN: spN, pkgN: d.pkgN || 0, total: (base + sur) * s.rooms, profit: mg * nights * s.rooms };
       });
       var philco = { rows: [], hot: "", early: "" }, PC = window.PB_PHILCO && h ? window.PB_PHILCO.hotels[h.name] : null;
       if (PC && dates.length) {
@@ -381,8 +390,8 @@
           var d = sx.def, pr = PC.rooms[d.type]; if (pr == null) return;
           var tm = 0, pp = 0, tsur = 0, anySur = false;
           dates.forEach(function (dt) {
-            var promo = d.promo && promoSell && h.stay && dt >= h.stay[0] && dt <= h.stay[1];
-            tm += promo ? d.promo : d.rate; pp += pr;
+            var promo = d.promo && promoSell && h.stay && dt >= h.stay[0] && dt <= h.stay[1], tv = promo ? d.promo : d.rate, sp = spRate(h, d.type, dt, nights, td);
+            tm += sp != null && sp < tv ? sp : tv; pp += pr;
             var ts = 0; h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0)) ts += x.amt[d.type]; });
             var ps = ts; if (PC.sur) { ps = 0; PC.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to) ps += x.amt; }); }
             tm += ts; pp += ps; if (ts || ps) anySur = true;
@@ -472,6 +481,11 @@
         if (x.pkgN && x.pkgN !== nights) hardWarn.push("'" + x.type + "'은(는) " + x.pkgN + "박 패키지 요금입니다(지금 " + nights + "박) — 합계는 1박 환산값이라 맞지 않습니다. 박수를 " + x.pkgN + "박으로 맞추거나 다른 객실을 고르세요.");
         if (x.nextN) infos.push(x.type + ": " + x.nextN + "박은 다음 요금 기간(" + h.next[0] + " ~ " + h.next[1] + ") 요금을 적용했습니다.");
       });
+      var spr = spRule(h);
+      if (spr && td >= spr.sell[0] && td <= spr.sell[1]) {
+        if (lines.some(function (x) { return x.spN; })) infos.push(spr.name + "(" + spr.sell[1].slice(5).replace("-", "/") + "까지 예약, " + spr.stay[1] + " 투숙분까지, " + spr.minN + "박 이상)을 적용했습니다 — 써차지는 그대로 붙습니다. " + (spr.note || ""));
+        else if (nights < spr.minN && src.some(function (s) { return spr.rates[s.def.type] != null; })) infos.push(spr.minN + "박 이상이면 " + spr.name + "이 적용됩니다(" + spr.sell[1].slice(5).replace("-", "/") + "까지 예약) — 지금 " + nights + "박이라 정상 요금으로 계산했습니다.");
+      }
       if (h && dates.length) {
         var first = dates[0], last = dates[dates.length - 1], rng = function (a) { return a && a.length === 2 && (first < a[0] || last > a[1]); };
         var vm = (h.valid || "").match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/), vrng = vm ? [vm[1], h.next ? h.next[1] : vm[2]] : null;
@@ -505,6 +519,7 @@
         if (x.sur) d.push("객실 요금 " + m(x.base) + " + " + (wkN && wkN === x.surNames.length ? "주말(금·토 숙박) 추가 요금 " : wkN ? "성수기·주말 추가 요금 " : "성수기 추가 요금 ") + m(x.sur) + "(" + x.surN + "박 해당)");
         else if (c.nights > 1 || x.rooms > 1) d.push("1박 " + m(Math.round(x.base / c.nights / x.rooms)) + " 기준");
         if (x.promoN) d.push("프로모션 요금 적용");
+        if (x.spN) d.push((spRule(c.h) || {}).name + " 적용" + (x.spN < c.nights ? "(" + x.spN + "박)" : ""));
         t += (d.length ? " (" + d.join(", ") + ")" : "") + "\n";
       });
       c.extras.forEach(function (x) { var ch = c.kids ? x.child : 0; if (!x.adult && !ch) return; t += "· " + x.name + ": " + (x.adult ? "성인 1인 " + m(x.adult) : "") + (ch ? (x.adult ? " / " : "") + "아동 1인 " + m(ch) : "") + (x.total ? " → " + m(x.total) : "") + (x.note ? " ※ " + x.note : "") + "\n"; });
@@ -911,11 +926,11 @@
         (hh ? "" : sSelect(["resort", "cur"], "통화", [["PHP", "페소"], ["USD", "달러"], ["KRW", "원화(트리셰이드 등)"]])) +
         sInput(["resort", "margin"], "1박당 붙이는 금액(비우면 " + (ST.resortMargin[c.cur] || 0) + (c.cur === "USD" ? "달러" : c.cur === "KRW" ? "원" : "페소") + ")", "number") + "</div>";
       if (hh) {
-        h += '<div style="margin-top:12px"><label>객실 타입 고르기 → 객실 수 → [추가]</label><div class="pick"><select id="roomSel">' + hh.rooms.map(function (x) { var mb = c.margin * bedsOf(hh, x.type); return '<option value="' + esc(x.type) + '">' + esc(x.type + (x.dyn ? " · 다이나믹 요금(TMJ 확인)" : x.pkgN ? " · " + x.pkgN + "박 패키지 " + Stay.money(x.rate + mb * x.pkgN, x.cur) : " · 1박 " + Stay.money(x.rate + mb, x.cur)) + (x.promo ? " (프로모 " + num(x.promo + mb) + ")" : "") + (x.next != null && hh.next ? " (" + hh.next[0].slice(5).replace("-", "/") + "~ " + num(x.next + mb) + ")" : "") + (mb !== c.margin ? " · 침실 " + bedsOf(hh, x.type) + "개" : "")) + "</option>"; }).join("") + '</select><select id="roomQty">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return "<option value=\"" + n + '">' + n + "객실</option>"; }).join("") + '</select><button class="btn sm gold" id="addPick">추가</button></div>' +
+        h += '<div style="margin-top:12px"><label>객실 타입 고르기 → 객실 수 → [추가]</label><div class="pick"><select id="roomSel">' + hh.rooms.map(function (x) { var mb = c.margin * bedsOf(hh, x.type); return '<option value="' + esc(x.type) + '">' + esc(x.type + (x.dyn ? " · 다이나믹 요금(TMJ 확인)" : x.pkgN ? " · " + x.pkgN + "박 패키지 " + Stay.money(x.rate + mb * x.pkgN, x.cur) : " · 1박 " + Stay.money(x.rate + mb, x.cur)) + (x.promo ? " (프로모 " + num(x.promo + mb) + ")" : "") + (spRate(hh, x.type, "", 99, today()) != null ? " (" + spRule(hh).minN + "박+ 특별 " + num(spRate(hh, x.type, "", 99, today()) + mb) + ")" : "") + (x.next != null && hh.next ? " (" + hh.next[0].slice(5).replace("-", "/") + "~ " + num(x.next + mb) + ")" : "") + (mb !== c.margin ? " · 침실 " + bedsOf(hh, x.type) + "개" : "")) + "</option>"; }).join("") + '</select><select id="roomQty">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return "<option value=\"" + n + '">' + n + "객실</option>"; }).join("") + '</select><button class="btn sm gold" id="addPick">추가</button></div>' +
           (r.picks.length ? r.picks.map(function (p, i) { return '<div class="picked"><span class="grow">' + esc(p.type) + " · <b>" + p.rooms + '객실</b></span><button class="btn sm danger" data-pdel="' + i + '">빼기</button></div>'; }).join("") : '<p class="note">고른 객실이 없으면 전체 객실 타입의 요금이 한꺼번에 나갑니다.</p>') + "</div>";
         var info = [];
         if (!r.checkin) info.push("체크인 날짜를 넣어야 성수기 추가 요금·갈라 디너가 계산됩니다.");
-        c.lines.forEach(function (x) { if (x.sur) info.push(x.type + ": 성수기 추가 요금 " + m(x.sur) + " (" + x.surNames.join(", ") + ", " + x.surN + "박)"); if (x.promoN) info.push(x.type + ": 프로모 요금 " + x.promoN + "박 적용"); });
+        c.lines.forEach(function (x) { if (x.sur) info.push(x.type + ": 성수기 추가 요금 " + m(x.sur) + " (" + x.surNames.join(", ") + ", " + x.surN + "박)"); if (x.promoN) info.push(x.type + ": 프로모 요금 " + x.promoN + "박 적용"); if (x.spN) info.push(x.type + ": " + (spRule(c.h) || {}).name + " " + x.spN + "박 적용"); });
         c.extras.forEach(function (x) { info.push(x.name + ": " + (x.adult ? "성인 " + m(x.adult) : "") + (x.child ? (x.adult ? " / " : "") + "아동 " + m(x.child) : "") + (x.total ? " → " + m(x.total) : " (인원을 넣으면 계산)")); });
         if (c.philco && (c.philco.rows.length || c.philco.hot)) h += '<div class="card" style="margin-top:12px;border:2px solid #0a8a5a;background:#eafbf3"><b style="color:#0a8a5a">💰 ' + (c.philco.rows.length ? "필코가 TMJ보다 더 쌉니다 — 예약은 필코로 (차액이 투윙스 수익)" : "필코 안내") + '</b><span style="color:#066"> (마크업 전 원가 · ' + c.nights + '박 기준 · 손님 글에는 나가지 않음)</span>' +
           c.philco.rows.map(function (x) { return "<br>• " + esc(x.type) + (x.rooms > 1 ? " ×" + x.rooms + "객실" : "") + ": TMJ " + m(x.tmj) + " / 필코 " + m(x.philco) + (x.diff > 0 ? " → <b>" + m(x.diff) + " 절감</b>" : " → 같거나 TMJ가 쌈") + (x.early ? "<br>&nbsp;&nbsp;&nbsp;필코 얼리버드 적용 시 " + m(x.early) + " → <b>" + m(x.earlyDiff) + " 절감</b>" : ""); }).join("") +
