@@ -135,6 +135,16 @@
     var N = function (t) { if (t && r.notes.indexOf(t) < 0) r.notes.push(t); };
     var X = function (label, p, n, unit) { r.extra.push({ label: label, p: p, n: n, unit: unit }); add(r.sp, p, n); add(r.net, p, n); add(r.off, p, n); };
     var main = r.lines.reduce(function (a, l) { return a + (l.it.key === "infant" ? 0 : l.n); }, 0);
+    /* 날짜·시간 확인(감사 PB-B-14·B-21) — 복사 전 확인창 */
+    if (!e.date) W("이용 날짜가 비었습니다 — 날짜를 넣어야 요금·휴무일·예약 가능 여부가 맞습니다.", true);
+    else if (e.date < today()) W("이용 날짜(" + e.date + ")가 오늘보다 앞입니다 — 날짜를 확인하세요.", true);
+    [e.time, e.start].forEach(function (v) { (String(v || "").match(/\d{1,2}:\d{2}/g) || []).forEach(function (hm) { var p = hm.split(":"); if (+p[0] > 23 || +p[1] > 59) W("시간 '" + hm + "'이(가) 맞지 않습니다 — 24시간 표기(예: 19:30)로 고치세요.", true); }); });
+    /* 공항: 인원에 맞는 차량(1~3인 이노바, 4~8인 밴, 9인+ 2대 — 원장 261118-48·261120-59, 감사 PB-C-13) */
+    if (shop.paxText) {
+      var pxs = String(e.paxText || "").replace(/\([^)]*\)/g, ""), pxm = pxs.match(/\d+(?=\s*명)/g) || (/명/.test(pxs) ? [] : pxs.match(/\d+/g) || []), pn = pxm.reduce(function (a, x) { return a + (+x); }, 0), inn = e.q.innova || 0, van = e.q.van || 0;
+      if (!pn) W("공항 인원 칸이 비었습니다 — 인원을 넣어야 업체에 전달되고 차량이 맞는지 확인됩니다.");
+      else if (pn > 8 * van + 3 * inn) W("인원 " + pn + "명인데 차량이 " + (inn ? "이노바 " + inn + "대" : "") + (inn && van ? "·" : "") + (van ? "밴 " + van + "대" : "") + "입니다 — 이노바는 1~3인, 밴은 4~8인, 9명 이상은 2대입니다.", true);
+    }
     /* 혼자 예약 */
     if (shop.solo && main === 1) { if (shop.solo === "block") W(shop.name + "은(는) 1인 단독 예약이 안 됩니다 — 2명 이상이거나 다른 호핑을 권해 주세요.", true); else X(shop.solo.label, { dep: shop.solo.dep, on: shop.solo.on, usd: shop.solo.usd }, 1, "명"); }
     /* 패키지 2인 기준(엘스파) — 한 패키지를 1명만 쓰면 싱글차지 */
@@ -230,11 +240,14 @@
         if (mas) {
           if (shop.needStart) t += "마사지 시작 희망 시간: " + e.start + "\n";
           t += "인원과 코스(예: 아로마 90분 2명): " + Text.courses(e) + "\n";
+          if (kidIn(shop, e)) t += "아동 만 나이: " + e.ages + "\n";
+          if (shop.optionLabel) t += shop.optionLabel + ": " + e.option + "\n";
           if (shop.sitter) t += "보모 추가(필요하실 때만 — " + shop.sitter.map(function (x) { return x[0] + "분 " + num(x[1]) + "페소"; }).join(" / ") + "): " + (sitterOf(shop, e) ? sitterStr(sitterOf(shop, e)).replace("보모 ", "") : "") + "\n";
         } else {
           if (shop.timeOptions) t += "선택(" + shop.timeOptions.join(" / ") + "): " + e.time + "\n";
           if (shop.optionLabel) t += shop.optionLabel + ": " + e.option + "\n";
           t += "인원: " + shop.items.map(function (it) { return lab(it, e) + " " + (e.q[it.key] || "") + unitOf(it); }).join(" / ") + "\n";
+          if (shop.paxText) t += shop.paxText + ": " + (e.paxText || "") + "\n";
           if (!shop.noAges) t += "아동 만 나이: " + e.ages + "\n";
         }
         t += (shop.noPickup ? "" : "픽업 장소: " + e.pickup + "\n" + (pt ? "픽업 희망 시간: " + e.time + "\n" : "") + "드랍 장소: " + e.drop + "\n") + "요청 사항: " + e.note + "\n";
@@ -248,7 +261,8 @@
       var c = Calc.cart(), t = "안녕하세요, " + B + "입니다. 요청하신 내용으로 견적을 안내해 드립니다.\n";
       c.rows.forEach(function (r, i) {
         var e = state.cart[i], pt = pickupTimeShop(r.shop);
-        t += "\n■ " + r.shop.name + (e.date ? " — " + dateKo(e.date) : "") + (e.time ? (pt ? " (픽업 " + e.time + ")" : " " + e.time) : "") + "\n";
+        var hd = [pt && e.time ? "픽업 " + e.time : "", e.start ? "마사지 시작 " + e.start : ""].filter(Boolean); // 오션스파 시작 시간도 머리줄에(감사 PB-B-15)
+        t += "\n■ " + r.shop.name + (e.date ? " — " + dateKo(e.date) : "") + (!pt && e.time ? " " + e.time : "") + (hd.length ? " (" + hd.join(" · ") + ")" : "") + "\n";
         r.lines.forEach(function (l) { t += "· " + lab(l.it, e) + " " + l.n + unitOf(l.it) + (l.it.sp ? " × (" + priceStr(l.it.sp) + ")" : "") + "\n" + (l.it.note ? "  └ " + l.it.note + "\n" : ""); });
         if (r.sitter) t += "· " + sitterStr(r.sitter) + " × (" + priceStr({ on: r.sitter.amt }) + ")\n";
         (r.extra || []).forEach(function (x) { t += "· " + x.label + (x.unit === "팀" ? ": " + priceStr(x.p) : " " + x.n + x.unit + " × (" + priceStr(x.p) + ")") + "\n"; });
@@ -313,6 +327,9 @@
         case "luggage": return e.luggage;
         case "option": return e.option || (shop.form === "weocean" ? "현장에서 선택" : "");
         case "roster": return e.roster;
+        case "ages": return e.ages ? "만 " + e.ages : ""; // 아동 나이(헬멧·파라세일링·빅보스 주니어·마사지 아동 코스 — 감사 PB-A-12·B-20)
+        case "flight": return shop.flightOpt ? e.option : ""; // 엘스파 웰컴·굿바이팩 항공편(PB-B-13)
+        case "paxText": return e.paxText; // 공항 인원(PB-C-13)
         case "courses": return (shop.cat === "마사지" ? "총 " + r.pax + "명 → " : "") + Text.courses(e) + (r.sitter ? " / " + sitterStr(r.sitter) : "");
         case "onsite": return onsiteStr(r.net);
         case "pay": return pay;
@@ -326,7 +343,7 @@
     vendor: function (e) {
       var shop = shopById(e.shopId), f = D.forms[shop.form], r = Calc.entry(e);
       var sc = showContact(shop);
-      return f.title.replace("{shop}", shop.name) + "\n" + f.lines.filter(function (l) { return (sc || (l[1] !== "contact" && l[1] !== "phone")) && !(shop.noPickup && /^(pickup|drop)/.test(l[1])); }).map(function (l) { return l[0].replace(sc ? "" : " & 연락처", "") + ": " + Text.vendorValue(l[1], e, r); }).join("\n");
+      return f.title.replace("{shop}", shop.name) + "\n" + f.lines.filter(function (l) { return (sc || (l[1] !== "contact" && l[1] !== "phone")) && !(shop.noPickup && /^(pickup|drop)/.test(l[1])) && !((l[1] === "ages" || l[1] === "flight") && !Text.vendorValue(l[1], e, r)); }).map(function (l) { return l[0].replace(sc ? "" : " & 연락처", "") + ": " + Text.vendorValue(l[1], e, r); }).join("\n");
     }
   };
 
