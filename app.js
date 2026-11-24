@@ -17,7 +17,7 @@
     get: function (k, d) { try { var v = localStorage.getItem("pb_" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem("pb_" + k, JSON.stringify(v)); } catch (e) { } }
   };
-  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, kidAges: "", ebn: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, kidBed: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" } };
+  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, kidAges: "", ebn: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, kidBed: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" }, viv: { key: "in", checkin: "", outDate: "", rooms: 1, adults: 2, kids: 0, bed: "", flight: "", pax: "", ename: "", note: "" } };
   var state = {
     view: "home", shopId: null, q: "", cat: "전체", tab: "ask", libOpen: {}, libQ: "",
     cart: store.get("cart", []), cust: store.get("cust", { name: "", contact: "" }),
@@ -649,11 +649,66 @@
       t += "\n※ " + ST.soltanaNote + "\n※ " + D.priceDate + " 기준 요금입니다.\n[한화 입금] " + S.accounts.krw + "\n\n예약이 확정되면 바우처를 보내 드리겠습니다. 감사합니다.";
       return t;
     },
+    /* 비비안 호텔 입국팩·출국팩(솔타나 만실 때, 원장 261124-64·74·261125-38) — 객실당 달러 + 추가 인원 페소. 원가(vivienNet)는 내부 자료에만 */
+    viv: function () {
+      var s = state.stay.viv, V = ST.vivien, N = ST.vivienNet || {}, p = V.packs.filter(function (x) { return x.key === s.key; })[0] || V.packs[0];
+      var hasIn = p.key === "in" || p.key === "inout", hasOut = p.key === "out" || p.key === "inout", packs = (hasIn ? 1 : 0) + (hasOut ? 1 : 0);
+      var rooms = Math.max(1, +s.rooms || 1), adults = Math.max(0, +s.adults || 0), kids = Math.max(0, +s.kids || 0);
+      var exA = Math.max(0, adults - V.stdAdult * rooms), exK = Math.max(0, kids - V.stdKid * rooms), exN = exA + exK; // 객실마다 성인 2 + 아동 2 까지 같은 요금, 넘는 인원만 추가
+      var price = (hasIn ? V.price.in : 0) + (hasOut ? V.price.out : 0), room = price * rooms, addPhp = exN * V.addPhp * packs;
+      var inDate = hasIn ? s.checkin : "", outDate = hasOut ? (p.key === "inout" ? s.outDate : s.checkin) : "";
+      var lock = [], warn = [], md = function (d) { return d.slice(5).replace("-", "/"); }, dates = [];
+      if (hasIn) dates.push(["입국팩(한국 출발)", inDate, true]); if (hasOut) dates.push(["출국팩(체크인)", outDate, false]);
+      if (!adults) lock.push("성인 인원이 0명입니다 — 인원을 넣어 주세요.");
+      dates.forEach(function (d) {
+        if (!d[1]) return;
+        V.closed.forEach(function (r) {
+          if (d[1] >= r[0] && d[1] <= r[1]) lock.push(d[0] + " " + dateKo(d[1]) + "은 비비안 이용 불가일(" + md(r[0]) + "~" + md(r[1]) + ")입니다 — 날짜를 바꾸거나 다른 숙소로 안내하세요.");
+          else if (d[2] && d[1] === addDays(r[0], -1)) warn.push(d[0] + " " + dateKo(d[1]) + "은 이용 불가일(" + md(r[0]) + "~" + md(r[1]) + ") 바로 전날이라 세부 도착이 이용 불가일 새벽입니다 — 예약되는지 먼저 확인하세요(손님 글에는 '상담 때 확인').");
+        });
+        if (d[1] > V.validTo) warn.push(d[0] + " 날짜가 " + V.validTo + " 뒤입니다 — 2027년 요금이 아직 없어 손님 글에 '요금 확인 후 확정'이 들어갑니다.");
+      });
+      if (p.key === "inout" && inDate && outDate && outDate <= inDate) lock.push("출국팩 체크인 날짜가 입국팩(한국 출발) 날짜보다 빠르거나 같습니다 — 날짜를 확인하세요.");
+      if (exN > rooms) warn.push("추가 인원이 객실당 1명을 넘습니다(" + exN + "명 / " + rooms + "객실) — 비비안 객실당 추가 인원(엑스트라베드)이 몇 명까지 되는지 확인된 기록이 없으니 예약 전에 확인하세요.");
+      var cost = (N.pack || 0) * packs * rooms + (N.add || 0) * exN * packs;
+      return { p: p, V: V, N: N, hasIn: hasIn, hasOut: hasOut, packs: packs, rooms: rooms, adults: adults, kids: kids, exA: exA, exK: exK, exN: exN, price: price, room: room, addPhp: addPhp, inDate: inDate, outDate: outDate,
+        lock: lock, warn: warn, y2027: dates.some(function (d) { return d[1] && d[1] > V.validTo; }), profitUsd: room, profitPhp: addPhp - cost, krw: fxKrw(room) };
+    },
+    vivAsk: function () {
+      var s = state.stay.viv, c = Stay.viv(), L = [["☝투숙타입", "비비안 호텔 " + c.p.name]];
+      if (c.hasIn) L.push(["☝입국팩 한국 출발 날짜(세부 도착일이 아니라 한국에서 출발하는 날)", c.inDate ? dateKo(c.inDate) : ""]);
+      if (c.hasOut) L.push(["☝출국팩 체크인 날짜", c.outDate ? dateKo(c.outDate) : ""]);
+      L.push(["☝이용 항공편명" + (c.p.key === "inout" ? "(도착편·출발편 둘 다)" : ""), s.flight], ["☝객실 수·침대(퀸 침대 1개 / 트윈 침대 2개)", c.rooms + "객실" + (s.bed ? " / " + s.bed : "")], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝묵으실 분 영문 성함", s.ename],
+        ["☝어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등)", ""], ["☝특이사항", s.note]);
+      return "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n비비안 호텔 예약을 도와드릴 수 있도록 아래 내용을 채워서 보내 주시기 바랍니다.\n\n" + L.map(function (l) { return l[0] + ": " + (l[1] || ""); }).join("\n");
+    },
+    vivText: function () {
+      var s = state.stay.viv, c = Stay.viv(), V = c.V;
+      var t = "안녕하세요, " + B + "입니다. 요청하신 내용으로 비비안 호텔 금액을 안내해 드립니다(객실 확인 후 확정).\n\n■ 비비안 호텔 " + c.p.name + "\n";
+      if (c.hasIn) t += "· 입국팩: " + (c.inDate ? dateKo(c.inDate) + " 한국 출발" : "날짜 미정") + " — 공항 픽업 포함, 자정(밤 12시) 체크인 → 오전 10시 체크아웃\n";
+      if (c.hasOut) t += "· 출국팩: " + (c.outDate ? dateKo(c.outDate) + " 체크인" : "날짜 미정") + " — 오후 3시 체크인 → 밤 10시 체크아웃 후 공항 드랍\n";
+      t += "· 객실당 " + (c.packs > 1 ? "입국팩 " + usd(V.price.in) + " + 출국팩 " + usd(V.price.out) + " = " + usd(c.price) : usd(c.price)) + "\n";
+      t += "· " + c.rooms + "객실 × " + usd(c.price) + " = " + usd(c.room) + "\n";
+      if (c.exN) t += "· 추가 인원 " + c.exN + "명 × " + peso(V.addPhp) + (c.packs > 1 ? " × 2팩" : "") + " (엑스트라베드 포함, 조식 불포함) = " + peso(c.addPhp) + "\n";
+      t += "→ 합계 " + usd(c.room) + (c.addPhp ? " + " + peso(c.addPhp) : "") + "\n";
+      if (s.pax) t += "· 인원: " + s.pax + "\n";
+      if (s.bed) t += "· 침대: " + s.bed + "\n";
+      if (s.flight) t += "· 항공편: " + s.flight + "\n";
+      t += "\n※ 슈페리어 객실(퀸 침대 1개 또는 트윈 침대 2개 중 요청)이고, 성인 2명 + 만 " + V.kidMaxAge + "세 이하 아이 2명까지 같은 요금이에요." + (c.exN ? "" : " 추가 인원은 1명 " + peso(V.addPhp) + "(엑스트라베드 포함, 조식 불포함)예요.");
+      if (c.hasIn) t += "\n※ 입국팩은 자정 넘어~새벽에 도착하는 항공편용이에요(밤 10~11시대 도착편은 상담 때 안내해 드려요). 입국장으로 나오시면 바로 앞에 비비안 직원이 피켓을 들고 있어요. 조식은 포함되지 않고 추가도 안 돼요. 날짜는 한국에서 출발하는 날 기준이고, 체크아웃 뒤 짐 보관이 돼요(늦은 체크아웃은 안 돼요).";
+      if (c.hasOut) t += "\n※ 출국팩은 저녁 출발편이면 밤 10시보다 일찍 공항으로 모셔다 드려요. 오후 3시 전에 오시면 짐을 먼저 맡겨 두실 수 있어요.";
+      t += "\n※ 리조트↔비비안 이동 차량은 요금에 포함되지 않아요. 내맘대로 시티투어·호핑투어·마사지를 함께 예약하시면 픽드랍 차량을 무료로 이용하실 수 있어요(업체·인원에 따라 조건이 있어 상담 때 안내해 드려요).";
+      t += "\n※ 12월 24~25일, 30~31일은 이용할 수 없어요(앞뒤 날짜는 상담 때 확인해 드려요).";
+      t += "\n※ " + V.priceDate + " 기준, 2026년 12월 31일까지 요금이에요." + (c.y2027 ? " 2027년 날짜는 요금 확인 후 확정해 드려요." : "");
+      t += "\n※ 결제 방법, 비행기가 늦어질 때 픽업 등은 상담 때 안내해 드려요.";
+      return t + "\n\n예약을 원하시면 항공편명, 묵으실 분 영문 이름, 아이 만 나이를 알려 주세요. 객실을 확인한 뒤 바로 안내해 드리겠습니다.";
+    },
     /* 장부에 넣을 요약 */
     booking: function () {
       var st = state.stay, tab = st.tab, o;
       if (tab === "resort") { var c = Stay.resort(), r = st.resort, dyn = c.lines.some(function (x) { return x.dynN; }), noP = c.all || dyn; o = { label: (r.name || "숙소") + " " + c.nights + "박", date: r.checkin, nights: c.nights, payText: c.all ? "객실 미정" : dyn ? "요금 확인 중" : Stay.money(c.total, c.cur), profitPhp: noP || c.cur !== "PHP" ? 0 : c.profit, profitUsd: noP || c.cur !== "USD" ? 0 : c.profit }; } // 다이나믹 요금은 장부에 '요금 확인 중'·수익 0(감사 PB-D-11)
       else if (tab === "villa") { var v = Stay.villa(); o = { label: v.d.name + " " + v.nights + "박", date: st.villa.checkin, nights: v.nights, payText: usd(v.total), profitPhp: 0, profitUsd: v.profit }; }
+      else if (tab === "viv") { var w = Stay.viv(); o = { label: "비비안 " + w.p.name + " " + w.rooms + "객실", date: w.inDate || w.outDate, nights: 1, payText: usd(w.room) + (w.addPhp ? " + " + peso(w.addPhp) : ""), profitPhp: w.profitPhp, profitUsd: w.profitUsd }; } // 수익 = 손님가(달러) − 원가(페소), 다른 통화는 '− ○페소'로(profitStr)
       else { var s = Stay.sol(); o = { label: "솔타나 " + s.p.name + " " + s.rooms + "객실", date: st.sol.checkin, nights: s.nights || 1, payText: usd(s.total), profitPhp: 0, profitUsd: 0, own: true }; }
       return o;
     }
@@ -967,7 +1022,7 @@
   function range(a, b) { var o = []; for (var i = a; i <= b; i++) o.push([i, i ? i + "명" : "없음"]); return o; }
   function viewStay() {
     if (!PRIV.ok) return "<h1>숙소 견적</h1>" + lockCard();
-    var st = state.stay, tabs = [["resort", "리조트·호텔"], ["villa", "풀빌라"], ["sol", "솔타나"]];
+    var st = state.stay, tabs = [["resort", "리조트·호텔"], ["villa", "풀빌라"], ["sol", "솔타나"], ["viv", "비비안"]];
     var h = "<h1>숙소 견적</h1>" + '<div class="tabs">' + tabs.map(function (t) { return '<button data-stab="' + t[0] + '" class="' + (st.tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" +
       '<div class="card"><div class="grid2">' + sInput(["cust", "name"], "손님 성함(장부 저장용)") + sInput(["cust", "contact"], "카카오톡 ID 또는 연락처") + fxInput() + "</div>" +
         '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="spaste" placeholder="손님이 채워 보낸 예약폼(또는 자유롭게 쓴 글)을 그대로 붙여넣으세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doStayParse">내용 읽기</button><button class="btn sm gold" id="doStayAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="saiMsg" style="margin:6px 0 0">[내용 읽기]는 우리가 보낸 예약폼 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다. 읽은 뒤 날짜·인원·객실·금액을 꼭 한 번 확인하세요.</p></details></div>';
@@ -1034,6 +1089,23 @@
         '<p class="note">엑스트라베드 ' + sc.beds + "개 포함(객실 " + sc.rooms + "개 — 엑스트라베드는 객실당 1개까지). 조식은 입국팩 추가 인원에만 포함되고, 룸온리는 조식 추가를 고른 인원만, 출국팩은 조식이 없습니다.</p></div>" +
         '<div class="total" style="margin-top:12px"><small>합계 (' + sc.tier.name + ')</small><div class="big">' + usd(sc.total) + "</div><small>객실 " + usd(sc.room) + (sc.extra ? " + 추가 인원 " + usd(sc.extra) : "") + " · 원화 " + won(sc.krw) + fxNote() + "</small></div>" +
         '<div class="card" data-key="outcard" style="margin-top:12px">' + outBox("sol_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.solAsk()) + outBox("sol_quote", "② 금액 안내", Stay.solText()) + "</div>";
+    }
+    if (st.tab === "viv") {
+      var wv = st.viv, wc = Stay.viv(), VV = wc.V;
+      h += '<div class="card" style="margin-top:10px"><h2>비비안 호텔 — 솔타나 만실 때</h2>' +
+        '<div class="scroll"><table><tr><th>상품</th><th>포함·시간</th><th>손님가(객실당)</th></tr>' + VV.packs.map(function (x) { var on = x.key === wc.p.key; return "<tr><td>" + (on ? "<b>" + esc(x.name) + " ✓</b>" : esc(x.name)) + "</td><td>" + esc(x.desc) + '</td><td class="' + (on ? "sp" : "off") + '">' + usd(x.key === "inout" ? VV.price.in + VV.price.out : VV.price[x.key]) + "</td></tr>"; }).join("") + "</table></div>" +
+        '<p class="note">단위: 달러, 객실당. 객실마다 성인 ' + VV.stdAdult + "명 + 만 " + VV.kidMaxAge + "세 이하 아동 " + VV.stdKid + "명까지 같은 요금, 넘는 인원은 1명 " + peso(VV.addPhp) + "(엑스트라베드, 조식 불포함, 팩마다). 이용 불가 12/24~25·12/30~31, 요금은 " + VV.validTo + "까지(2027년은 확인 후 확정).</p>" +
+        '<div class="grid2">' + sSelect(["viv", "key"], "투숙 타입", VV.packs.map(function (x) { return [x.key, x.name]; })) +
+        sInput(["viv", "checkin"], wc.hasIn ? "입국팩 한국 출발 날짜(세부 도착일 아님)" : "출국팩 체크인 날짜", "date") + (wc.p.key === "inout" ? sInput(["viv", "outDate"], "출국팩 체크인 날짜", "date") : "") +
+        sSelect(["viv", "rooms"], "객실 수", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return [n, n + "객실"]; })) + sSelect(["viv", "adults"], "성인(만 12세 이상) 전체 인원", range(0, 20)) + sSelect(["viv", "kids"], "만 " + VV.kidMaxAge + "세 이하 아동 전체 인원", range(0, 10)) +
+        sSelect(["viv", "bed"], "침대", [["", "상관없음"], ["퀸 침대 1개", "퀸 침대 1개"], ["트윈 침대 2개", "트윈 침대 2개"]]) +
+        sInput(["viv", "flight"], "이용 항공편명") + sInput(["viv", "pax"], "각 방 인원 구성(아동 만 나이)") + sInput(["viv", "ename"], "묵으실 분 영문 성함") + "</div>" +
+        '<div style="margin-top:10px"><label>특이사항(예약폼에 들어감)</label><input data-s="viv.note" value="' + esc(wv.note) + '"></div>' +
+        (wc.lock.length ? '<div class="warn big" data-key="lockbox" style="margin-top:12px;border:2px solid #d00;color:#d00">⛔ 견적 복사를 막았습니다 — 먼저 고치세요<br>• ' + wc.lock.map(esc).join("<br>• ") + "</div>" : "") + (wc.warn.length ? '<p class="warn big">⚠ ' + wc.warn.map(esc).join("<br>⚠ ") + "</p>" : "") +
+        '<p class="note">추가 인원 ' + wc.exN + "명 자동 계산(성인 " + wc.exA + "명 + 아동 " + wc.exK + "명) — 객실 " + wc.rooms + "개 × (성인 " + VV.stdAdult + " + 아동 " + VV.stdKid + ") 기준.</p></div>" +
+        '<div class="total" style="margin-top:12px"><small>합계 (' + esc(wc.p.name) + ")</small><div class=\"big\">" + usd(wc.room) + (wc.addPhp ? " + " + peso(wc.addPhp) : "") + "</div><small>객실 " + usd(wc.room) + " · 원화 " + won(wc.krw) + fxNote() + (wc.addPhp ? " · 추가 인원 페소는 따로" : "") + "</small></div>" +
+        '<div class="profit" style="margin-top:8px">예상 수익 ' + profitStr(0, wc.profitPhp, wc.profitUsd) + (wc.N.pack ? " (원가 객실당 팩마다 " + peso(wc.N.pack) + " · 추가 인원은 받은 그대로 " + peso(wc.N.add) + ")" : "") + " (손님 글에는 나가지 않습니다)</div>" +
+        '<div class="card" data-key="outcard" style="margin-top:12px">' + outBox("stay_viv_intro", "⓪ 솔타나 만실 안내문(카톡 확정본 — 처음 안내할 때)", VV.intro) + outBox("stay_viv_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.vivAsk()) + outBox("stay_viv_quote", "② 금액 안내", Stay.vivText()) + "</div>";
     }
     var so = openBk(state.stayOpenId); if (so && so.stayTab !== st.tab) so = null;
     return h + (so ? '<p class="note" data-key="openNote" style="margin:12px 0 0">📂 장부에서 불러온 기록: <b>' + esc(so.name || "(이름 없음)") + "</b> · " + esc(so.created) + " · " + esc(so.status) + " — [이 기록 고쳐 저장]은 그 기록을 바꾸고, 다른 손님이면 [새 기록으로 저장]을 누르세요.</p>" : "") +
@@ -1371,6 +1443,7 @@
     if (d.tab) { state.tab = d.tab; return render(); }
     if (d.copy === "stay_villa" && state.stay.tab === "villa") { var gv = Stay.villa(); if (gv.lock.length) return toast("복사를 막았습니다 — 빨간 칸(풀빌라 수익)을 먼저 고치세요"); if (gv.warn.length && !confirm(gv.warn.join("\n") + "\n\n그대로 복사할까요?")) return; }
     if (d.copy === "sol_quote" && state.stay.tab === "sol") { var gs = Stay.sol(); if (gs.lock.length) return toast("복사를 막았습니다 — 빨간 칸(엑스트라베드 수)을 먼저 고치세요"); }
+    if (d.copy === "stay_viv_quote" && state.stay.tab === "viv") { var gw = Stay.viv(); if (gw.lock.length) return toast("복사를 막았습니다 — 빨간 칸(이용 불가일·날짜·인원)을 먼저 고치세요"); }
     if (d.copy === "stay_resort" && state.stay.tab === "resort") { var gc = Stay.resort(); if (gc.lock.length) return toast("복사를 막았습니다 — 빨간 칸을 먼저 고치세요"); if (gc.needOk && !gc.okDone) return toast("먼저 아래 ‘확인했습니다’ 칸을 체크하세요 (서차지·갈라·추가금)"); }
     if (d.copy) {
       render(); // 방금 친 칸까지 반영된 글로 맞춘 뒤 복사한다
