@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#14213D">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="필보드">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="icon" href="icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>필보드</title>
+<script>
+/* 파일을 부를 때마다 번호를 붙여, 브라우저가 옛 파일을 다시 쓰지 않게 한다. 배포할 때 deploy.sh 가 "dev" 를 배포 번호로 바꾼다 */
+var PB_BUILD = "1124-2242", PB_V = PB_BUILD === "dev" ? Date.now() : PB_BUILD;
+document.write('<link rel="stylesheet" href="style.css?v=' + PB_V + '">');
+</script>
+</head>
+<body>
+<header class="top">
+  <button class="brand" id="goHome" aria-label="홈으로"><img class="mark" src="icon-192.png" alt="" width="34" height="34"><span>필보드<small>투윙스/솔타나</small></span></button>
+  <nav>
+    <button data-view="home" class="on">업체</button>
+    <button data-view="stay">숙소</button>
+    <button data-view="paste">통합</button>
+    <button data-view="quote">견적 <b id="cartCount">0</b>/3</button>
+    <button data-view="lib">자료</button>
+    <button data-view="ledger">장부</button>
+  </nav>
+</header>
+<main id="app"></main>
+<p id="ver" class="note" style="text-align:center;margin:0 0 24px"></p>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/* 앱으로 설치 안내(공용 install.js — 크롬 설치 창 띠·아이폰 홈 화면 안내·카톡 안 브라우저 안내, 원장 261120-01) */
+window.PHIL_INSTALL = { key: "philboard", name: "필보드", icon: "icon-192.png", color: "#14213D", who: "owner" };
+/* 이 PC 개발용(dev)은 원본 자료를 그대로 읽고, 공개 주소는 손님가만 든 shops.js 를 읽는다 — 넷가·원가·계좌는 로그인 뒤 data/private.enc 로 연다(tools/split_private.js) */
+(PB_BUILD === "dev" ? ["config.js", "data/shops.js", "data/hotels.js", "data/philco.js", "app.js", "install.js"] : ["config.js", "data/shops.js", "app.js", "install.js"]).forEach(function (f) { document.write('<script src="' + f + '?v=' + PB_V + '"><\/script>'); });
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
