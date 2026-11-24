@@ -786,6 +786,7 @@
             var mm = new RegExp("(?:" + word + ")[^\\d/+,]*?(\\d+)").exec(v.replace(/\([^)]*\)/g, "")); if (mm) { e.q[it.key] = +mm[1]; hits++; }
           });
           var ag = /만\s*([\d,\s·세]+)/.exec(v); if (ag && !e.ages) e.ages = ag[1].replace(/세/g, "").trim();
+          if (shop.paxText && /\d/.test(v) && !/대/.test(v)) { e.paxText = v; hits++; } // 공항: "인원: 성인 3명" — 차량 대수가 아니라 사람 수(감사 PB-C-13)
         }
         else if (/시작/.test(k)) { e.start = v; hits++; }
         else if (/시간|선택/.test(k)) { e.time = v; hits++; }
@@ -872,7 +873,7 @@
       '<label class="chk"><input type="checkbox" id="useContact"' + (state.cust.useContact ? " checked" : "") + '> 카카오톡 ID·연락처 칸 쓰기(업체가 손님께 직접 연락하는 곳 등 필요할 때만)</label>' +
       '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button><button class="btn sm gold" id="doAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다.</p></details></div>';
     state.cart.forEach(function (e, i) {
-      var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지", pt = pickupTimeShop(s), noAge = mas || s.noAges;
+      var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지", pt = pickupTimeShop(s), noAge = (mas && !kidIn(s, e)) || s.noAges; // 마사지도 아동 코스를 담으면 나이 칸(감사 PB-B-20)
       h += '<div class="card" data-key="cart_' + s.id + '" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
         '<p class="note">★ 견적 필수: 날짜·인원' + (mas ? "·코스" : "") + ". 나머지는 예약 확정 때 채워도 됩니다.</p>" +
         '<div class="grid2">' + field(e, i, "date", "이용 날짜 ★", "date") + (mas ? (s.needStart ? field(e, i, "start", "마사지 시작 시간") : "") : pt ? "" : (s.timeOptions ? field(e, i, "time", "선택", "", s.timeOptions) : field(e, i, "time", "시간(필요 시)"))) + "</div>" +
@@ -880,7 +881,7 @@
           return '<div class="qty" data-key="q_' + s.id + "_" + it.key + '"><span>' + esc(lab(it, e)) + "<small>" + priceStr(it.sp) + '</small></span><select data-e="' + i + '" data-q="' + it.key + '">' + nums.map(function (x) { return "<option" + (x === Number(e.q[it.key] || 0) ? " selected" : "") + ">" + x + "</option>"; }).join("") + "</select></div>";
         }).join("") + "</div>" +
         (s.sitter ? '<div class="grid2" style="margin-bottom:10px">' + field(e, i, "sitter", "보모 추가(아이 돌봄, 현장결제)", "", sitterOpts(s)) + field(e, i, "sitterN", "보모 인원", "", ["1명", "2명", "3명"]) + "</div>" : "") +
-        '<div class="grid2">' + (noAge ? "" : field(e, i, "ages", "아동 만 나이")) + (s.noPickup ? "" : field(e, i, "pickup", "픽업 장소") + (pt ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"])) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + "</div>" +
+        '<div class="grid2">' + (noAge ? "" : field(e, i, "ages", "아동 만 나이")) + (s.noPickup ? "" : field(e, i, "pickup", "픽업 장소") + (pt ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"])) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + (s.paxText ? field(e, i, "paxText", s.paxText) : "") + "</div>" +
         (s.form === "clubcebu" || s.form === "lokal" ? '<div style="margin-top:10px"><label>예약자 전원 영문이름·생년월일' + (s.form === "clubcebu" ? "·성별" : "") + '</label><textarea data-e="' + i + '" data-k="roster" style="min-height:70px">' + esc(e.roster) + "</textarea></div>" : "") +
         '<div style="margin-top:10px"><label>특이사항(직접 입력)</label><textarea data-e="' + i + '" data-k="note" style="min-height:60px">' + esc(e.note) + "</textarea></div>" +
         (s.needContact && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
@@ -1024,7 +1025,61 @@
     return api("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: { refresh_token: sess.refresh_token } }).then(setSess, function (e) { if (e.status === 400 || e.status === 401) { setSess(null); if (state.view === "ledger") render(); } throw e; });
   }
   function koErr(m) { return /Invalid login/i.test(m) ? "이메일 또는 비밀번호가 맞지 않습니다." : /not confirmed/i.test(m) ? "아직 메일 확인이 안 됐습니다. 받은 메일의 링크를 누른 뒤 다시 로그인해 주세요." : /already registered/i.test(m) ? "이미 만든 계정입니다. [로그인]을 눌러 주세요." : /rate limit/i.test(m) ? "확인 메일을 너무 자주 요청했습니다. 한 시간쯤 뒤에 다시 해 주세요." : /at least/i.test(m) ? "비밀번호는 6자 이상이어야 합니다." : /not authorized|sending.*email|confirmation email/i.test(m) ? "계정은 접수됐지만 확인 메일을 보내지 못했습니다. 클실장에게 '계정 만들었어'라고 알려 주시면 바로 승인해 드립니다. (" + m + ")" : m; }
-  function touch(x) { x.u = Date.now(); return x; }
+  /* 장부 칸별 합치기(2026-11-25 감사 P3 — PB-D-01·02·13): 기록마다 u(마지막 저장), fu{칸: 고친 시각}, ub(fu 에 없는 칸의 시각).
+     두 기기가 같은 기록의 다른 칸을 고치면 둘 다 남고, 같은 칸이면 나중에 고친 쪽이 남는다. 지운 기록은 30일 동안 내용을 품은 '지움 표시'로 남아 되살릴 수 있다. */
+  var META = { u: 1, fu: 1, ub: 1 }, KEEP_DEL = 30 * 864e5;
+  function stab(o) { return JSON.stringify(o, function (k, v) { return v && typeof v === "object" && !Array.isArray(v) ? Object.keys(v).sort().reduce(function (a, kk) { a[kk] = v[kk]; return a; }, {}) : v; }); }
+  function fuMax(x) { var m = x.ub != null ? x.ub : 0; Object.keys(x.fu || {}).forEach(function (k) { if (x.fu[k] > m) m = x.fu[k]; }); return m; }
+  function legacyEdit(x) { return x.ub != null && (x.u || 0) > fuMax(x); } // 칸 시각을 모르는 옛 앱이 고친 기록 — 모든 칸을 u 시각으로 본다
+  function fTime(x, k) { if (legacyEdit(x)) return x.u || 0; return x.fu && x.fu[k] != null ? x.fu[k] : x.ub != null ? x.ub : (x.u || 0); }
+  function fixLegacy(x) { if (legacyEdit(x)) { x.ub = x.u; delete x.fu; } if (x.ub == null) x.ub = x.u || 0; x.fu = x.fu || {}; }
+  function setF(x, obj) { // 값이 바뀐 칸만 시각을 남긴다
+    var t = Date.now(), ch = Object.keys(obj).filter(function (k) { return !META[k] && stab(x[k]) !== stab(obj[k]); });
+    if (!ch.length) return x;
+    fixLegacy(x); if (t <= x.u) t = x.u + 1;
+    ch.forEach(function (k) { x[k] = obj[k]; x.fu[k] = t; }); x.u = t; return x;
+  }
+  function normRec(m, T) { var ks = Object.keys(T), lo = Infinity, hi = 0, fu = {}; ks.forEach(function (k) { if (T[k] < lo) lo = T[k]; if (T[k] > hi) hi = T[k]; }); if (!ks.length) lo = hi = 0; ks.forEach(function (k) { if (T[k] > lo) fu[k] = T[k]; }); m.u = hi; if (Object.keys(fu).length) { m.ub = lo; m.fu = fu; } return m; }
+  function mergeRec(l, r) {
+    var keys = {}, m = {}, T = {};
+    [l, r].forEach(function (o) { Object.keys(o).forEach(function (k) { if (!META[k] && o[k] !== undefined) keys[k] = 1; }); });
+    Object.keys(keys).forEach(function (k) {
+      var hl = l[k] !== undefined, hr = r[k] !== undefined, tl = fTime(l, k), tr = fTime(r, k), useR;
+      if (!hr) useR = false; else if (!hl) useR = true;
+      else useR = tr !== tl ? tr > tl : (r.u || 0) !== (l.u || 0) ? (r.u || 0) > (l.u || 0) : stab(r[k]) > stab(l[k]); // 같은 시각이면 어느 기기에서든 같은 쪽을 고르게
+      m[k] = useR ? r[k] : l[k]; T[k] = !hr ? tl : !hl ? tr : Math.max(tl, tr);
+    });
+    return normRec(m, T);
+  }
+  function tombOf(t) { var o = { id: t.id, u: t.u || 0, deleted: true }; if (t.data) o.data = t.data; return o; }
+  function cleanTomb(t) { t = tombOf(t); if (t.data && Date.now() - t.u > KEEP_DEL) delete t.data; return t; } // 30일 지나면 내용만 비운다(지움 표시는 남아 다른 기기에서 되살아나지 않게)
+  function pickDel(l, r) {
+    if (l.deleted && r.deleted) return (r.u || 0) > (l.u || 0) || ((r.u || 0) === (l.u || 0) && r.data && !l.data) ? r : l;
+    var del = l.deleted ? l : r, rec = l.deleted ? r : l;
+    if ((rec.u || 0) > (del.u || 0)) return rec; // 지운 뒤에 다른 기기에서 고친 기록 → 고친 쪽
+    return del.data ? del : { id: del.id, u: del.u, deleted: true, data: rec }; // 같으면 지움(내용은 30일 동안 품는다)
+  }
+  function autoDone() { // 확정 건은 이용일이 지나면 완료 — 저장 시각(u)은 건드리지 않는다(다른 기기에서 지운 기록이 되살아나지 않게, PB-D-02)
+    var td = today(), ch = 0;
+    state.bookings.forEach(function (x) { var d = x.lastDate || x.firstDate; if (x.status === "확정" && d && d < td) { var t = Math.max(fTime(x, "status"), fTime(x, "auto")) + 1; fixLegacy(x); x.status = "완료"; x.auto = true; x.fu.status = t; x.fu.auto = t; ch++; } });
+    var n0 = stab(state.tomb); state.tomb = state.tomb.map(cleanTomb); if (ch || stab(state.tomb) !== n0) save(); return ch;
+  }
+  // 백업 파일로 되살리기: 장부에 없는 기록만 더한다(있는 기록은 지금 장부가 최신이라 그대로). 지운 기록이면 물어보고 되살린다(PB-D-13)
+  function importBk(list) {
+    if (!Array.isArray(list)) return toast("필보드 백업 파일이 아닙니다(philboard-backup-날짜.json 을 고르세요)");
+    var add = 0, back = 0, keep = 0, now = Date.now();
+    list.forEach(function (r) {
+      if (!r || typeof r !== "object" || !r.id || r.deleted || !Array.isArray(r.shops)) return;
+      if (openBk(r.id)) { keep++; return; }
+      var tb = state.tomb.filter(function (x) { return x.id === r.id; })[0], x = clone(r);
+      if (tb) { if (!confirm("'" + (r.name || "이름 없음") + "' 기록은 장부에서 지운 기록입니다. 백업 파일에서 되살릴까요?")) return; delete x.fu; delete x.ub; x.u = Math.max(now, (tb.u || 0) + 1); state.tomb = state.tomb.filter(function (y) { return y !== tb; }); back++; }
+      else add++; // 처음 보는 기록은 원래 저장 시각 그대로(서버에 더 새 내용이 있으면 그쪽이 남는다)
+      state.bookings.push(x);
+    });
+    state.bookings.sort(function (a, b) { return a.id.localeCompare(b.id); });
+    save(); syncSoon(); render();
+    toast("백업에서 " + (add + back) + "건을 더했습니다" + (back ? "(지운 기록 " + back + "건 되살림)" : "") + (keep ? " · 이미 있는 " + keep + "건은 지금 장부 그대로" : ""));
+  }
   function openBk(id) { return id ? state.bookings.filter(function (x) { return x.id === id; })[0] || null : null; }
   function emptyEntries() { return state.cart.filter(function (e) { return !Calc.entry(e).pax; }).map(function (e) { return shopById(e.shopId).name; }); }
   function pickEdited(test) { var o = {}, b = {}; Object.keys(state.edited).forEach(function (k) { if (test(k)) { o[k] = state.edited[k]; if (state.editedBase[k] != null) b[k] = state.editedBase[k]; } }); return Object.keys(o).length ? { t: o, b: b } : null; }
@@ -1033,29 +1088,32 @@
   function syncSoon() { if (!sb || !sync.user) return; clearTimeout(sync.timer); sync.timer = setTimeout(doSync, 800); }
   function syncMsg(m) { sync.msg = m; var el = $("#syncMsg"); if (el) el.textContent = m; }
   function doSync() {
-    if (!sb || !sync.user || sync.busy) return Promise.resolve();
+    if (!sb || !sync.user) return Promise.resolve();
+    if (sync.busy) { sync.again = true; return Promise.resolve(); } // 도는 중에 또 고치면 끝난 뒤 한 번 더
     sync.busy = true; syncMsg("동기화 중…");
+    var next = function () { sync.busy = false; if (sync.again) { sync.again = false; doSync(); return true; } return false; };
     return fresh().then(function () { return api("/rest/v1/pb_bookings?select=id,data", { auth: true }); }).then(function (rows) {
-      var remote = {}, local = {}, ups = [], changed = 0;
-      (rows || []).forEach(function (r) { remote[r.id] = r.data; });
-      state.bookings.forEach(function (x) { local[x.id] = x; });
-      state.tomb.forEach(function (x) { local[x.id] = { id: x.id, u: x.u, deleted: true }; });
-      Object.keys(remote).forEach(function (id) {
-        var r = remote[id], l = local[id];
-        if (l && (l.u || 0) >= (r.u || 0)) return;
-        changed++;
-        state.bookings = state.bookings.filter(function (x) { return x.id !== id; }); state.tomb = state.tomb.filter(function (x) { return x.id !== id; });
-        if (r.deleted) state.tomb.push({ id: id, u: r.u }); else state.bookings.push(r);
-        local[id] = r;
+      autoDone();
+      var R = {}, L = {}, ups = [], changed = 0, nb = [], nt = [];
+      (rows || []).forEach(function (r) { if (r && r.id && r.data) R[r.id] = r.data; });
+      state.tomb.forEach(function (t) { L[t.id] = tombOf(t); });
+      state.bookings.forEach(function (x) { L[x.id] = x; });
+      Object.keys(Object.assign({}, R, L)).forEach(function (id) {
+        var l = L[id], r = R[id], m = !r ? l : !l ? r : (l.deleted || r.deleted) ? pickDel(l, r) : mergeRec(l, r);
+        if (m.deleted) m = cleanTomb(m);
+        var ms = stab(m);
+        if (l && ms !== stab(l)) changed++; else if (!l) changed++;
+        if (!r || ms !== stab(r)) ups.push({ id: id, data: m, updated_at: new Date().toISOString() });
+        (m.deleted ? nt : nb).push(m);
       });
-      Object.keys(local).forEach(function (id) { var l = local[id], r = remote[id]; if (!r || (l.u || 0) > (r.u || 0)) ups.push({ id: id, data: l, updated_at: new Date().toISOString() }); });
-      state.bookings.sort(function (a, b) { return a.id.localeCompare(b.id); });
+      state.bookings = nb.sort(function (a, b) { return a.id.localeCompare(b.id); }); state.tomb = nt;
       save();
-      var done = function () { sync.busy = false; syncMsg("동기화 완료 " + new Date().toLocaleTimeString("ko-KR") + " · 받은 것 " + changed + "건, 올린 것 " + ups.length + "건"); if (changed && state.view === "ledger") render(); };
+      var done = function () { if (next()) return; syncMsg("동기화 완료 " + new Date().toLocaleTimeString("ko-KR") + " · 받은 것 " + changed + "건, 올린 것 " + ups.length + "건"); if (changed && state.view === "ledger") render(); };
       if (!ups.length) return done();
       return api("/rest/v1/pb_bookings?on_conflict=user_id,id", { method: "POST", auth: true, prefer: "resolution=merge-duplicates,return=minimal", body: ups }).then(done);
-    }).catch(function (e) { sync.busy = false; syncMsg("동기화 실패: " + koErr(e.message || String(e))); });
+    }).catch(function (e) { sync.again = false; sync.busy = false; syncMsg("동기화 실패: " + koErr(e.message || String(e))); });
   }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) syncSoon(); }); // 폰에서 앱으로 돌아오면 바로 합친다
   function syncBox() {
     if (!sb) return '<div class="card" style="margin-top:10px"><p class="note">기기 간 동기화를 쓸 수 없는 상태입니다(인터넷 연결 또는 설정 파일 확인). 장부는 이 기기에만 저장됩니다.</p></div>';
     if (!sync.user) return '<div class="card" style="margin-top:10px"><h2>폰·PC 장부 동기화</h2><p class="note">로그인하면 이 기기의 장부가 다른 기기와 합쳐지고, 넷가·숙소 원가·계좌가 열립니다. 로그인하지 않으면 장부는 이 기기에만 저장됩니다.</p>' + loginForm() + "</div>";
@@ -1130,7 +1188,12 @@
       return '<div class="card"><div class="row"><div class="grow"><b>' + esc(x.name || "(이름 없음)") + '</b> <span class="badge' + (x.status !== "견적" ? " ok" : "") + '">' + x.status + '</span>' + (x.checks && x.checks.length && !x.checkDone ? ' <span class="badge" style="background:#d00;color:#fff">🔴 확인 필요</span>' : "") + '<div class="note">' + esc(x.shops.join(" · ")) + " · 이용일 " + (x.firstDate || "미정") + " · 저장 " + x.created + '</div><div class="note">' + (x.kind === "stay" ? "견적 " + esc(x.payText) : "입금 " + won(x.payNow)) + " · 수익 " + (x.own ? "직영(따로 계산)" : profitStr(x.profitKrw, x.profitPhp, x.profitUsd)) + (x.auto ? " · 이용일이 지나 자동 완료" : "") + "</div>" + (x.checks && x.checks.length && !x.checkDone ? '<div class="note" style="color:#d00">• ' + x.checks.map(esc).join("<br>• ") + "</div>" : "") + "</div></div>" +
         '<div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm ghost" data-open="' + x.id + '">불러오기</button>' + ["견적", "확정", "완료"].map(function (st) { return '<button class="btn sm ' + (x.status === st ? "" : "ghost") + '" data-st="' + x.id + "|" + st + '">' + st + "</button>"; }).join("") + (x.checks && x.checks.length && !x.checkDone ? '<button class="btn sm gold" data-chk="' + x.id + '">확인 완료</button>' : "") + '<button class="btn sm danger" data-del="' + x.id + '">삭제</button></div></div>';
     }).join("") : '<div class="empty">' + (state.bookings.length ? "조건에 맞는 예약이 없습니다." : "저장된 예약이 없습니다.") + "</div>") + "</div>" +
-      '<p class="note" style="margin-top:14px">장부는 이 기기의 브라우저에 저장되고, 로그인하면 다른 기기와 합쳐집니다. <button class="btn sm ghost" id="exportBk">백업 파일 내려받기</button></p>';
+      '<p class="note" style="margin-top:14px">장부는 이 기기의 브라우저에 저장되고, 로그인하면 다른 기기와 합쳐집니다(두 기기에서 서로 다른 칸을 고치면 둘 다 남고, 같은 칸은 나중에 고친 쪽이 남습니다). <button class="btn sm ghost" id="exportBk">백업 파일 내려받기</button> <label class="btn sm ghost" style="display:inline-block;cursor:pointer">백업 파일로 되살리기<input type="file" id="importBk" accept=".json,application/json" hidden></label></p>';
+    var tbs = state.tomb.filter(function (x) { return x.data; }).sort(function (a, c) { return (c.u || 0) - (a.u || 0); });
+    if (tbs.length) h += '<details class="card" data-key="tombs" style="margin-top:10px"><summary>최근 지운 기록 ' + tbs.length + '건 — 30일 동안 되살릴 수 있습니다</summary>' + tbs.map(function (t) {
+      var x = t.data, dd = new Date(t.u), dk = dd.getFullYear() + "-" + ("0" + (dd.getMonth() + 1)).slice(-2) + "-" + ("0" + dd.getDate()).slice(-2);
+      return '<div class="row" style="margin-top:8px;border-top:1px solid #eee;padding-top:8px"><div class="grow"><b>' + esc(x.name || "(이름 없음)") + '</b> <span class="badge">' + esc(x.status || "") + '</span><div class="note">' + esc((x.shops || []).join(" · ")) + " · 이용일 " + esc(x.firstDate || "미정") + " · 지운 날 " + dk + '</div></div><button class="btn sm" data-restore="' + esc(t.id) + '">되살리기</button></div>';
+    }).join("") + "</details>";
     return h;
   }
   /* ---------- 필코가 더 싼 숙소 목록 (연말 문의용 한 페이지) ---------- */
@@ -1237,7 +1300,7 @@
       var sbk = Stay.booking(), tab = state.stay.tab, sres0 = tab === "resort" ? Stay.resort() : null, sob = t.id === "saveStay" ? openBk(state.stayOpenId) : null; if (sob && sob.stayTab !== tab) sob = null;
       if (sob && (sob.name || "") !== (state.stay.cust.name || "") && !confirm("불러온 기록은 '" + (sob.name || "이름 없음") + "' 손님인데 지금 성함은 '" + (state.stay.cust.name || "없음") + "'입니다. 그 기록을 이 내용으로 바꿀까요?\n(다른 손님이면 [취소] 후 [새 기록으로 저장]을 누르세요)")) return;
       var srec = { kind: "stay", stayTab: tab, staySnap: clone(state.stay[tab]), name: state.stay.cust.name, cust: clone(state.stay.cust), cart: [], checks: sres0 ? sres0.checks.concat(sres0.hardWarn) : [], shops: [sbk.label], firstDate: sbk.date || "", lastDate: sbk.date ? addDays(sbk.date, sbk.nights) : "", payNow: 0, payText: sbk.payText, profitKrw: 0, profitPhp: sbk.profitPhp, profitUsd: sbk.profitUsd, own: !!sbk.own, edited: pickEdited(function (k) { return isStayOut(k) && k.indexOf(tab === "sol" ? "sol_" : "stay_" + tab) === 0; }) };
-      if (sob) { if (JSON.stringify(sob.checks || []) !== JSON.stringify(srec.checks)) srec.checkDone = false; Object.assign(sob, srec); touch(sob); }
+      if (sob) { if (JSON.stringify(sob.checks || []) !== JSON.stringify(srec.checks)) srec.checkDone = false; setF(sob, srec); }
       else { var sid = "b" + Date.now(); state.bookings.push(Object.assign({ u: Date.now(), id: sid, created: today(), status: "견적", checkDone: false }, srec)); state.stayOpenId = sid; }
       save(); syncSoon(); render(); return toast(sob ? "불러온 기록을 고쳐 저장했습니다" : "장부에 저장했습니다");
     }
@@ -1357,13 +1420,23 @@
       if (ob2 && (ob2.name || "") !== (state.cust.name || "") && !confirm("불러온 기록은 '" + (ob2.name || "이름 없음") + "' 손님인데 지금 성함은 '" + (state.cust.name || "없음") + "'입니다. 그 기록을 이 내용으로 바꿀까요?\n(다른 손님이면 [취소] 후 [새 기록으로 저장]을 누르세요)")) return;
       var c = Calc.cart(), dates = state.cart.map(function (e) { return e.date; }).filter(Boolean).sort();
       var rec = { name: state.cust.name, cust: clone(state.cust), cart: clone(state.cart), shops: c.rows.map(function (r) { return r.shop.name; }), firstDate: dates[0] || "", lastDate: dates[dates.length - 1] || "", payNow: c.payNow, profitKrw: c.profitKrw, profitPhp: c.profitPhp, profitUsd: c.profitUsd, edited: pickEdited(isQuoteOut) };
-      if (ob2) { Object.assign(ob2, rec); touch(ob2); }
+      if (ob2) setF(ob2, rec);
       else { var nid = "b" + Date.now(); state.bookings.push(Object.assign({ u: Date.now(), id: nid, created: today(), status: "견적" }, rec)); state.openId = nid; }
       save(); syncSoon(); render(); return toast(ob2 ? "불러온 기록을 고쳐 저장했습니다(새 기록이 생기지 않음)" : "장부에 저장했습니다");
     }
-    if (d.chk) { state.bookings.forEach(function (x) { if (x.id === d.chk) { x.checkDone = true; touch(x); } }); save(); syncSoon(); return render(); }
-    if (d.st) { var p = d.st.split("|"); state.bookings.forEach(function (x) { if (x.id === p[0]) { x.status = p[1]; x.auto = false; touch(x); } }); save(); syncSoon(); return render(); }
-    if (d.del) { if (confirm("이 예약 기록을 삭제할까요? 되돌릴 수 없습니다.")) { state.bookings = state.bookings.filter(function (x) { return x.id !== d.del; }); state.tomb.push({ id: d.del, u: Date.now() }); save(); syncSoon(); render(); } return; }
+    if (d.chk) { state.bookings.forEach(function (x) { if (x.id === d.chk) setF(x, { checkDone: true }); }); save(); syncSoon(); return render(); }
+    if (d.st) { var p = d.st.split("|"); state.bookings.forEach(function (x) { if (x.id === p[0]) setF(x, { status: p[1], auto: false }); }); save(); syncSoon(); return render(); }
+    if (d.del) {
+      var dx = openBk(d.del); if (!dx) return;
+      if (confirm("'" + (dx.name || "이름 없음") + "' 예약 기록을 삭제할까요?\n30일 동안은 장부 아래 '최근 지운 기록'에서 되살릴 수 있습니다.")) { state.bookings = state.bookings.filter(function (x) { return x.id !== d.del; }); state.tomb = state.tomb.filter(function (x) { return x.id !== d.del; }); state.tomb.push({ id: d.del, u: Math.max(Date.now(), (dx.u || 0) + 1), deleted: true, data: clone(dx) }); save(); syncSoon(); render(); toast("지웠습니다 — 30일 동안 '최근 지운 기록'에서 되살릴 수 있습니다"); }
+      return;
+    }
+    if (d.restore) { // 최근 지운 기록 되살리기 — 지금 시각으로 저장해 다른 기기의 '지움'보다 나중이 되게 한다
+      var tb = state.tomb.filter(function (x) { return x.id === d.restore; })[0]; if (!tb || !tb.data) return;
+      var rx = clone(tb.data); delete rx.fu; delete rx.ub; delete rx.deleted; rx.id = tb.id; rx.u = Math.max(Date.now(), (tb.u || 0) + 1);
+      state.tomb = state.tomb.filter(function (x) { return x !== tb; }); state.bookings.push(rx); save(); syncSoon(); render();
+      return toast("되살렸습니다 — '" + (rx.name || "이름 없음") + "' 기록이 장부에 돌아왔습니다");
+    }
     if (d.open) {
       var bk = openBk(d.open); if (!bk) return;
       if (bk.kind === "stay") {
@@ -1417,6 +1490,7 @@
   });
   document.addEventListener("change", function (ev) {
     var t = ev.target, d = t.dataset;
+    if (t.id === "importBk") { var bf = t.files && t.files[0]; t.value = ""; if (bf) { var fr = new FileReader(); fr.onload = function () { var j = null; try { j = JSON.parse(fr.result); } catch (e) { } importBk(j); }; fr.readAsText(bf); } return; }
     if (t.id === "okChk") { var oc = Stay.resort(); state.stay.resort.okSig = t.checked ? oc.sig : ""; save(); return render(); }
     if (d.q) { state.cart[+d.e].q[d.q] = +t.value; return refreshQuote(); }
     if (d.k && t.tagName === "SELECT") state.cart[+d.e][d.k] = t.value; /* 선택 칸(오전·오후, 짐 유무 등)은 여기서 저장한다 — input 쪽은 글자 칸만 처리 */
@@ -1431,10 +1505,10 @@
     if (d.rr) { save(); return render(); }
   });
   state.cart = state.cart.filter(function (e) { return shopById(e.shopId); });
-  (function () { var td = today(), ch = 0; state.bookings.forEach(function (x) { var d = x.lastDate || x.firstDate; if (x.status === "확정" && d && d < td) { x.status = "완료"; x.auto = true; touch(x); ch++; } }); if (ch) save(); })();
+  autoDone();
   var dl = document.createElement("datalist"); dl.id = "places"; dl.innerHTML = (S.places || []).map(function (p) { return '<option value="' + esc(p) + '">'; }).join(""); document.body.appendChild(dl);
   var verEl = $("#ver"); if (verEl) verEl.textContent = "필보드 버전 " + (window.PB_BUILD === "dev" ? "개발용(이 PC)" : window.PB_BUILD) + " · 요금 자료 " + D.version;
   fxFetch();
-  window.PB = { Calc: Calc, Text: Text, Stay: Stay, state: state, parsePaste: parsePaste, parseStayPaste: parseStayPaste, PRIV: PRIV, loadPrivate: loadPrivate };
+  window.PB = { Calc: Calc, Text: Text, Stay: Stay, state: state, parsePaste: parsePaste, parseStayPaste: parseStayPaste, PRIV: PRIV, loadPrivate: loadPrivate, sync: sync, doSync: doSync, mergeRec: mergeRec };
   if (!PRIV.ok && (store.get("pkey", null) || (sb && sess))) { PRIV.loading = true; render(); loadPrivate(); } else render();
 })();
