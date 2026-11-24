@@ -29,7 +29,8 @@
   /* 손으로 고친 글: 칸을 바꿔도 지우지 않고 남긴다. 그 뒤 계산이 바뀌면 '계산이 바뀌었습니다' 표시만 하고, [원래대로]를 눌러야 새 계산 글로 바뀐다(감사 PB-A-10·D-14). 새 견적·불러오기 때만 비운다 */
   function clearEdited(test) { Object.keys(state.edited).forEach(function (k) { if (!test || test(k)) { delete state.edited[k]; delete state.editedBase[k]; } }); }
   var isStayOut = function (k) { return /^(stay_|sol_)/.test(k); };
-  function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "", sitter: "", sitterN: "" }; }
+  function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "", sitter: "", sitterN: "", paxText: "" }; }
+  function kidIn(s, e) { return s.items.some(function (it) { return (e.q[it.key] || 0) > 0 && /아동|키즈|어린이|kid/i.test(it.label + " " + it.key); }); } // 아동 코스·아동권을 담았나(감사 PB-B-20)
 
   /* ---------- 요금 표기 ---------- */
   var ZERO = function () { return { dep: 0, on: 0, usd: 0, pre: 0 }; };
