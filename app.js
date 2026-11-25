@@ -703,15 +703,15 @@
       c.total = c.room + extra; c.krw = fxKrw(c.total);
       return c;
     },
-    /* 솔타나 한달살기 계산(아이디어 ③, 원장 261120-58·261125-74): 객실당 110만원(30일 미만 기준) + 30일 넘긴 날 하루 50달러 + 객실당 3~4명이면 엑베 한 달 50달러 */
+    /* 솔타나 한달살기 계산(아이디어 ③, 원장 261120-58·261125-74·261125-147): 객실당 110만원(30일 미만 기준) + 30일 넘긴 날 하루 50달러
+       + 객실당 3~4명이면 엑베 한 달 50달러 + 30일 넘긴 날 엑베 박당 10달러 */
     month: function () {
       var s = state.stay.sol, M = ST.soltanaMonth; if (!M) return null;
       var days = Math.max(1, Math.min(120, Math.round(+s.mDays || M.days))), rooms = Math.max(1, +s.mRooms || 1), pax = Math.max(1, Math.min(M.maxPax, +s.mPax || 2));
-      var over = Math.max(0, days - M.days), bed = pax >= M.bedFrom ? M.bedUsd : 0, krw = M.krw * rooms, usdAdd = (over * M.overUsd + bed) * rooms;
+      var over = Math.max(0, days - M.days), bed = pax >= M.bedFrom ? M.bedUsd : 0, bedOver = bed && over ? over * (M.overBedUsd || 0) : 0, krw = M.krw * rooms, usdAdd = (over * M.overUsd + bed + bedOver) * rooms;
       var ro = days * ST.soltanaTiers[0].price.room * rooms, warn = []; // 같은 기간 룸온리(1박 50달러, 청소·공항 픽드랍 없음) 비교
       if (days < M.days) warn.push(days + "일도 한달살기 요금은 30일과 같은 " + won(M.krw) + "입니다(30일 미만 기준). 같은 기간 룸온리는 " + usd(ro) + "(약 " + won(fxKrw(ro)) + ")" + (fxKrw(ro) < krw ? " — 룸온리가 더 쌉니다. 청소·공항 픽드랍 포함 여부를 같이 말씀드리세요." : "입니다."));
-      if (over && bed) warn.push("30일을 넘긴 " + over + "일의 엑스트라베드 요금은 정해진 값이 없습니다(한 달 50달러만 기록) — 상담 때 확인하세요.");
-      return { days: days, rooms: rooms, pax: pax, over: over, bed: bed, krw: krw, usdAdd: usdAdd, roomOnly: ro, warn: warn, M: M };
+      return { days: days, rooms: rooms, pax: pax, over: over, bed: bed, bedOver: bedOver, krw: krw, usdAdd: usdAdd, roomOnly: ro, warn: warn, M: M };
     },
     monthText: function () {
       var s = state.stay.sol, m = Stay.month(); if (!m) return "";
@@ -721,6 +721,7 @@
       t += "· 한 달(30일 미만 기준) 정상가 " + man(M.official) + " → 투윙스 프로모 " + man(M.krw) + per + (m.rooms > 1 ? " = " + won(m.krw) : "") + "\n";
       if (m.over) t += "· 30일을 넘긴 " + m.over + "일 × " + usd(M.overUsd) + per + " = " + usd(m.over * M.overUsd * m.rooms) + "\n";
       if (m.bed) t += "· 엑스트라베드(객실당 3~4명) 한 달 " + usd(M.bedUsd) + per + " = " + usd(M.bedUsd * m.rooms) + "\n";
+      if (m.bedOver) t += "· 30일을 넘긴 " + m.over + "일 엑스트라베드 × " + usd(M.overBedUsd) + per + " = " + usd(m.bedOver * m.rooms) + "\n";
       t += "→ 합계 " + won(m.krw) + (m.usdAdd ? " + " + usd(m.usdAdd) + "\n" + fxLine(m.usdAdd).replace("→ 원화로 입금하실 경우", "→ 달러분(" + usd(m.usdAdd) + ")을 원화로 입금하실 경우") + "\n→ 원화 합계: " + won(m.krw + fxKrw(m.usdAdd)) : "") + "\n";
       t += "\n[포함] " + M.incl.join(" · ") + "\n[불포함] " + M.excl.join(" · ") + "\n";
       t += "\n※ 한 객실에 성인 2명 + 아동 2명 또는 성인 3명 + 아동 1명까지 묵으실 수 있습니다.\n※ " + ST.soltanaNote + "\n※ " + D.priceDate + " 기준 요금입니다.\n[한화 입금] " + S.accounts.krw + "\n\n원하시는 입실 날짜와 인원 구성을 알려 주시면 예약 가능 여부를 바로 확인해 드리겠습니다.";
@@ -1251,7 +1252,7 @@
         '<div class="total" style="margin-top:12px"><small>합계 (' + sc.tier.name + ')</small><div class="big">' + usd(sc.total) + "</div><small>객실 " + usd(sc.room) + (sc.extra ? " + 추가 인원 " + usd(sc.extra) : "") + " · 원화 " + won(sc.krw) + fxNote() + "</small></div>" +
         '<div class="card" data-key="outcard" style="margin-top:12px">' + outBox("sol_ask", "① 손님께 보낼 예약폼(빈칸 채워 달라는 안내)", Stay.solAsk()) + outBox("sol_quote", "② 금액 안내", Stay.solText()) + "</div>";
       var mo = Stay.month(); // 한달살기 계산(아이디어 ③) — 위 견적과 따로 쓰는 계산·안내 글
-      if (mo) h += '<details class="card" data-key="solmonth" style="margin-top:12px"' + (sc.nights >= 7 || s.mIn ? " open" : "") + '><summary><b>한달살기 계산</b> <span class="note">객실당 ' + won(mo.M.krw) + '(30일 미만 기준) · 30일 넘으면 하루 ' + usd(mo.M.overUsd) + ' · 객실당 3~4명이면 엑베 한 달 ' + usd(mo.M.bedUsd) + '</span></summary>' +
+      if (mo) h += '<details class="card" data-key="solmonth" style="margin-top:12px"' + (sc.nights >= 7 || s.mIn ? " open" : "") + '><summary><b>한달살기 계산</b> <span class="note">객실당 ' + won(mo.M.krw) + '(30일 미만 기준) · 30일 넘으면 하루 ' + usd(mo.M.overUsd) + ' · 객실당 3~4명이면 엑베 한 달 ' + usd(mo.M.bedUsd) + (mo.M.overBedUsd ? '(30일 넘긴 날은 엑베 박당 ' + usd(mo.M.overBedUsd) + ')' : '') + '</span></summary>' +
         '<div class="grid2" style="margin-top:8px">' + sInput(["sol", "mIn"], "입실 날짜", "date") + sInput(["sol", "mDays"], "투숙 일수(일)", "number", ' min="1" max="120"') + sSelect(["sol", "mRooms"], "객실 수", [1, 2, 3, 4, 5].map(function (n) { return [n, n + "객실"]; })) + sSelect(["sol", "mPax"], "객실당 인원(성인2+아동2 또는 성인3+아동1까지)", [1, 2, 3, 4].map(function (n) { return [n, n + "명"]; })) + "</div>" +
         (mo.warn.length ? '<p class="warn">⚠ ' + mo.warn.map(esc).join("<br>⚠ ") + "</p>" : "") +
         '<div class="total" style="margin-top:8px"><small>한달살기 합계</small><div class="big">' + won(mo.krw) + (mo.usdAdd ? " + " + usd(mo.usdAdd) : "") + "</div><small>" + (mo.usdAdd ? "원화 합계 " + won(mo.krw + fxKrw(mo.usdAdd)) + fxNote() + " · " : "") + "같은 기간 룸온리 " + usd(mo.roomOnly) + "</small></div>" +
