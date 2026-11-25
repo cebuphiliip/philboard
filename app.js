@@ -17,12 +17,12 @@
     get: function (k, d) { try { var v = localStorage.getItem("pb_" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem("pb_" + k, JSON.stringify(v)); } catch (e) { } }
   };
-  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, kidAges: "", ebn: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "double", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, kidBed: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" }, viv: { key: "in", checkin: "", outDate: "", rooms: 1, adults: 2, kids: 0, bed: "", flight: "", pax: "", ename: "", note: "" } };
+  var stayDefault = { tab: "resort", cust: { name: "", contact: "" }, resort: { hotel: "", name: "", checkin: "", nights: 1, adults: 2, kids: 0, kidAges: "", ebn: 0, cur: "PHP", margin: "", picks: [], rows: [] }, villa: { idx: 0, checkin: "", nights: 1, profit: ST.villaProfit }, sol: { tier: "promo", key: "in", checkin: "", rooms: 1, nights: 1, addAdult: 0, addKid: 0, addBaby: 0, kidBed: 0, bfPax: 0, totalPax: "", flight: "", pax: "", ename: "", t1: "", t2: "", note: "" }, viv: { key: "in", checkin: "", outDate: "", rooms: 1, adults: 2, kids: 0, bed: "", flight: "", pax: "", ename: "", note: "" } };
   var state = {
     view: "home", shopId: null, q: "", cat: "전체", tab: "ask", libOpen: {}, libQ: "",
     cart: store.get("cart", []), cust: store.get("cust", { name: "", contact: "" }),
     rate: store.get("rate2", S.pesoRate), fx: store.get("fx2", S.usdRate), fxInfo: store.get("fxInfo", { manual: false, mid: 0, date: "" }), bookings: store.get("bookings", []), tomb: store.get("tomb", []), edited: store.get("edited", {}), editedBase: store.get("editedBase", {}), openId: store.get("openId", ""), stayOpenId: store.get("stayOpenId", ""),
-    stay: (function () { var d = clone(stayDefault), v = store.get("stay3", {}); Object.keys(d).forEach(function (k) { if (v[k] != null) d[k] = typeof d[k] === "object" ? Object.assign(d[k], v[k]) : v[k]; }); return d; })(),
+    stay: (function () { var d = clone(stayDefault), v = store.get("stay3", {}); Object.keys(d).forEach(function (k) { if (v[k] != null) d[k] = typeof d[k] === "object" ? Object.assign(d[k], v[k]) : v[k]; }); if (!store.get("mig_sol1125", 0)) { if (d.sol.tier === "double" && !d.sol.checkin && !d.sol.ename) d.sol.tier = "promo"; store.set("mig_sol1125", 1); } return d; })(), // 11-25 솔타나 기본 = 프로모(원장 261125-69) — 빈 솔타나 칸만 한 번 바꾼다
     led: { q: "", sort: "new", status: "전체", shop: "전체" }
   };
   function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("fx2", state.fx); store.set("fxInfo", state.fxInfo); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); store.set("edited", state.edited); store.set("editedBase", state.editedBase); store.set("openId", state.openId); store.set("stayOpenId", state.stayOpenId); }
@@ -81,7 +81,9 @@
       if (state.view === "stay" || state.view === "quote") render();
     }).catch(function () { });
   }
-  function showContact(shop) { return !!(state.cust.useContact || state.cust.contact || (shop && shop.needContact)); }
+  /* 업체가 손님께 직접 연락하는 곳(vendor_contacts)은 연락처 칸을 늘 보인다(사장님 11-25, 원장 261125-71) */
+  function needsContact(shop) { return !!(shop && (shop.needContact || shop.after === "vendor_contacts")); }
+  function showContact(shop) { return !!(state.cust.useContact || state.cust.contact || needsContact(shop));}
   /* 수익 표기: 원 + 페소 + 달러 (넷가가 다른 통화면 '− 1,200페소'처럼 뺄 금액으로 나온다) */
   function profitStr(k, p, u) {
     var a = []; [[k, won], [p, peso], [u, usd]].forEach(function (x) { if (x[0]) a.push((x[0] < 0 ? "− " : a.length ? "+ " : "") + x[1](Math.abs(x[0]))); });
@@ -91,24 +93,27 @@
   /* ---------- 계산 ---------- */
   var Calc = {
     entry: function (e) {
-      var shop = shopById(e.shopId), r = { lines: [], sp: ZERO(), off: ZERO(), net: ZERO(), offKnown: true, noPrice: false, pax: 0, shop: shop };
+      var shop = shopById(e.shopId), r = { lines: [], sp: ZERO(), off: ZERO(), net: ZERO(), cost: ZERO(), offKnown: true, noPrice: false, pax: 0, shop: shop };
       shop.items.forEach(function (it) {
         var n = Number(e.q[it.key] || 0); if (!n) return;
         r.pax += n; r.lines.push({ it: it, n: n });
         if (!it.sp) { r.noPrice = true; r.offKnown = false; return; }
         add(r.sp, it.sp, n);
-        add(r.net, shop.commission ? it.sp : (it.net || { on: it.sp.on, usd: it.sp.usd }), n);
+        /* payFull(오션·오아시스): 손님이 업체에 손님가 전액을 현장결제하고 업체가 커미션을 쌓아 준다 — 업체폼 금액은 손님가, 수익은 메뉴별 넷가로(원장 261125-61·62) */
+        add(r.net, shop.commission || shop.payFull ? it.sp : (it.net || { on: it.sp.on, usd: it.sp.usd }), n);
+        if (shop.payFull) add(r.cost, it.net || it.sp, n);
         if (it.off) add(r.off, it.off, n); else r.offKnown = false;
       });
       var st = sitterOf(shop, e); // 보모(시터) 추가 — 현장결제에 더하고 업체 몫(수익 0)으로 계산
-      if (st) { r.sitter = st; var sp = { on: st.amt }; add(r.sp, sp, st.n); add(r.net, sp, st.n); add(r.off, sp, st.n); }
+      if (st) { r.sitter = st; var sp = { on: st.amt }; add(r.sp, sp, st.n); add(r.net, sp, st.n); add(r.off, sp, st.n); add(r.cost, sp, st.n); }
       var cmBase = clone(r.sp); // 커미션 업체는 조건 추가금(업체 몫)을 빼고 수익을 잡는다
       applyRules(shop, e, r);
       r.profitKnown = !shop.noNet;
       var cm = shop.commission || 0;
-      r.profitKrw = !r.profitKnown ? 0 : cm ? Math.round(cmBase.dep * cm) : r.sp.dep - r.net.dep;
-      r.profitPhp = !r.profitKnown ? 0 : cm ? Math.round(cmBase.on * cm) : r.sp.on - r.net.on;
-      r.profitUsd = !r.profitKnown ? 0 : cm ? Math.round(cmBase.usd * cm) : (r.sp.pre + r.sp.usd) - (r.net.pre + r.net.usd);
+      var pf = shop.payFull;
+      r.profitKrw = !r.profitKnown ? 0 : cm ? Math.round(cmBase.dep * cm) : pf ? cmBase.dep - r.cost.dep : r.sp.dep - r.net.dep;
+      r.profitPhp = !r.profitKnown ? 0 : cm ? Math.round(cmBase.on * cm) : pf ? cmBase.on - r.cost.on : r.sp.on - r.net.on;
+      r.profitUsd = !r.profitKnown ? 0 : cm ? Math.round(cmBase.usd * cm) : pf ? (cmBase.pre + cmBase.usd) - (r.cost.pre + r.cost.usd) : (r.sp.pre + r.sp.usd) - (r.net.pre + r.net.usd);
       r.prepayKrw = shop.prepayOnsite ? Math.ceil(r.sp.on * state.rate / 1000) * 1000 : 0; // 현장결제분 원화 사전결제(천 원 단위 올림)
       r.payNow = r.sp.dep + r.prepayKrw;
       return r;
@@ -174,7 +179,15 @@
       var ar = shop.ageRule, ag = agesList(e);
       if (ag.some(function (a) { return a < ar.min; })) W(ar.minMsg, true);
       var jn = ag.filter(function (a) { return a >= ar.junior[0] && a <= ar.junior[1]; }).length;
-      if (jn > Number(e.q[ar.juniorKey] || 0)) W("만 " + ar.junior[0] + "~" + ar.junior[1] + "세가 " + jn + "명 있습니다 — '주니어 추가'를 넣어 주세요.", true);
+      if (ar.juniorKey && jn > Number(e.q[ar.juniorKey] || 0)) W("만 " + ar.junior[0] + "~" + ar.junior[1] + "세가 " + jn + "명 있습니다 — '주니어 추가'를 넣어 주세요.", true);
+      if (!ar.juniorKey && jn) W("만 " + ar.junior[0] + "~" + ar.junior[1] + "세 주니어가 " + jn + "명 있습니다 — 주니어 추가 요금은 상담 때 업체 금액 그대로 안내하세요(수익 0, 원장 261125-63).", false);
+    }
+    /* 수익 0이라 견적 상품으로 팔지 않는 것 — '가능합니다, 원하시면 상담 때 안내' 한 줄(빅보스 주니어·숙박 추가, 원장 261125-63) */
+    if (shop.askLine) N(shop.askLine);
+    /* 아동 나이 상한(클럽세부·골드: 만 11세까지, 원장 261125-66) — 넘는 아이는 성인 요금 */
+    if (shop.kidMax != null) {
+      var kag = agesList(e), ovr = kag.filter(function (a) { return a > shop.kidMax; }).length, kin = kag.length - ovr;
+      if (ovr && Number(e.q.child || 0) > kin) W("만 " + (shop.kidMax + 1) + "세 이상 " + ovr + "명은 성인 요금입니다(아동은 만 " + shop.kidMax + "세까지) — 성인 칸으로 옮겨 주세요.", true);
     }
     /* 날짜: 휴무 요일, 골프 주말·공휴일 요금 */
     var di = dayOf(e.date);
@@ -329,7 +342,8 @@
     },
     vendorValue: function (key, e, r) {
       var c = state.cust, shop = r.shop;
-      var pay = shop.vendorPay || [onsiteStr(r.net) ? "현장결제 " + onsiteStr(r.net) : "", r.net.dep ? "예약금 " + won(r.net.dep) : ""].filter(Boolean).join(", ");
+      /* 클럽세부처럼 현장결제분을 투윙스가 미리 받아 사장님이 업체에 바로 송금하는 곳 — 업체가 현장에서 또 받지 않게(원장 261125-60) */
+      var pay = shop.vendorPay || [onsiteStr(r.net) ? (shop.prepayOnsite ? "현장결제분 " + onsiteStr(r.net) + " — 투윙스 선결제 완료, 손님께 받지 마세요" : "현장결제 " + onsiteStr(r.net)) : "", r.net.dep ? "예약금 " + won(r.net.dep) : ""].filter(Boolean).join(", ");
       var extra = (e.luggage ? ". 짐 보관: " + e.luggage : "") + (e.note ? ". " + e.note : "");
       if (key.charAt(0) === "=") return key.slice(1);
       switch (key) {
@@ -616,12 +630,14 @@
       var extra = ex.reduce(function (a, x) { return a + x[1]; }, 0), total = +s.totalPax || 0, warn = [];
       if (total > rooms * ST.soltanaMaxPax) warn.push("객실당 최대 " + ST.soltanaMaxPax + "명까지입니다. 총 " + total + "명이면 객실이 " + Math.ceil(total / ST.soltanaMaxPax) + "개 이상 필요합니다.");
       else if (total > rooms * ST.soltanaStdPax) warn.push("객실 기준 인원은 최대 " + ST.soltanaStdPax + "명입니다. " + ST.soltanaMaxPax + "명은 손님이 좁아도 괜찮다고 할 때만 받습니다.");
-      var lock = []; // 엑베 수는 절대 객실 수보다 많을 수 없다(원장 261110-36) — 성인 추가가 있을 때도 검사(감사 PB-D-12)
-      if ((kB || aA) && aA + (hasIn ? aK : 0) + kB > rooms) lock.push("엑스트라베드는 객실당 1개까지입니다. 지금 성인 추가 " + aA + (hasIn && aK ? " + 아동 추가 " + aK : "") + (kB ? " + 아이 엑스트라베드 " + kB : "") + " = " + (aA + (hasIn ? aK : 0) + kB) + "개라 객실 수(" + rooms + "개)를 넘습니다 — 객실을 늘리거나 인원 구성을 바꿔 주세요.");
+      /* 엑베는 객실당 무조건 1개(원장 261110-36). 퀸사이즈라 한 개에 성인 2명 또는 아동 2명까지 — 만 7세+ 아동 2명이어도 엑베 1개(사장님 11-25, 원장 261125-68).
+         추가 인원 요금은 지금처럼 인당. 필요한 엑베 = 추가 인원 2명당 1개 + 아이 엑베 요청 수, 이게 객실 수를 넘으면 잠금 */
+      var lock = [], exP = aA + (hasIn ? aK : 0), needBeds = Math.ceil(exP / 2) + kB;
+      if ((kB || aA) && needBeds > rooms) lock.push("엑스트라베드는 객실당 1개까지입니다(퀸사이즈 — 한 개에 성인 2명 또는 아동 2명까지). 지금 추가 인원 " + exP + "명" + (kB ? " + 아이 엑스트라베드 요청 " + kB + "개" : "") + "이면 엑스트라베드가 " + needBeds + "개 필요해 객실 수(" + rooms + "개)를 넘습니다 — 객실을 늘리거나 인원 구성을 바꿔 주세요.");
       if (kB && !hasIn && !hasOut) warn.push("아이 엑스트라베드 10달러는 입국팩·출국팩에만 있습니다(룸온리만이면 고르지 않습니다).");
       var parts = []; if (p.pack) parts.push(ST.soltana.filter(function (x) { return x.key === p.pack; })[0].name + " " + usd(tier.price[p.pack])); if (nights) parts.push("룸온리 " + nights + "박 × " + usd(tier.price.room));
       var c = { p: p, tier: tier, price: one(tier), official: one(off), parts: parts.join(" + "), rooms: rooms, nights: nights, hasIn: hasIn, hasOut: hasOut, aA: aA, aK: aK, aB: aB, kB: kB, bfPax: bfPax, ex: ex, extra: extra,
-        beds: Math.min(rooms, aA + (hasIn ? aK : 0) + ((hasIn || hasOut) ? kB : 0)), freeKid: (aK && (nights || hasOut)) || aB, room: one(tier) * rooms, warn: warn, lock: lock, rate: +state.fx || S.usdRate };
+        beds: Math.min(rooms, exP + ((hasIn || hasOut) ? kB : 0)), freeKid: (aK && (nights || hasOut)) || aB, room: one(tier) * rooms, warn: warn, lock: lock, rate: +state.fx || S.usdRate };
       c.total = c.room + extra; c.krw = fxKrw(c.total);
       return c;
     },
@@ -979,7 +995,7 @@
     if (!PRIV.ok) return "<h1>견적·예약 작성</h1>" + lockCard();
     if (!state.cart.length) return '<div class="empty"><p>견적에 담긴 업체가 없습니다.</p><p class="note">업체 목록에서 [담기]를 누르면 여기에 들어옵니다. 한 번에 3곳까지 함께 견적을 낼 수 있습니다.</p><button class="btn gold" data-view="home">업체 고르기</button></div>';
     var c = Calc.cart(), nums = []; for (var n = 0; n <= 20; n++) nums.push(n);
-    var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div>' + (state.cust.useContact || state.cust.contact || state.cart.some(function (e) { return shopById(e.shopId).needContact; }) ? '<div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div>' : "") + '</div>' +
+    var h = '<h1>견적·예약 작성</h1><div class="card"><h2>손님 정보</h2><div class="grid2"><div><label>대표자 성함</label><input data-c="name" value="' + esc(state.cust.name) + '"></div>' + (state.cust.useContact || state.cust.contact || state.cart.some(function (e) { return needsContact(shopById(e.shopId)); }) ? '<div><label>카카오톡 ID 또는 연락처</label><input data-c="contact" value="' + esc(state.cust.contact) + '"></div>' : "") + '</div>' +
       '<label class="chk"><input type="checkbox" id="useContact"' + (state.cust.useContact ? " checked" : "") + '> 카카오톡 ID·연락처 칸 쓰기(업체가 손님께 직접 연락하는 곳 등 필요할 때만)</label>' +
       '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button><button class="btn sm gold" id="doAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다.</p></details></div>';
     state.cart.forEach(function (e, i) {
@@ -994,7 +1010,7 @@
         '<div class="grid2">' + (noAge ? "" : field(e, i, "ages", "아동 만 나이")) + (s.noPickup ? "" : field(e, i, "pickup", "픽업 장소") + (pt ? field(e, i, "time", "픽업 시간") : "") + field(e, i, "drop", "드랍 장소") + field(e, i, "luggage", "짐 보관", "", ["유", "무"])) + (s.optionLabel ? field(e, i, "option", s.optionLabel) : "") + (s.paxText ? field(e, i, "paxText", s.paxText) : "") + "</div>" +
         (s.form === "clubcebu" || s.form === "lokal" ? '<div style="margin-top:10px"><label>예약자 전원 영문이름·생년월일' + (s.form === "clubcebu" ? "·성별" : "") + '</label><textarea data-e="' + i + '" data-k="roster" style="min-height:70px">' + esc(e.roster) + "</textarea></div>" : "") +
         '<div style="margin-top:10px"><label>특이사항(직접 입력)</label><textarea data-e="' + i + '" data-k="note" style="min-height:60px">' + esc(e.note) + "</textarea></div>" +
-        (s.needContact && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
+        (needsContact(s) && !state.cust.contact ? '<p class="warn">이 업체는 손님 카카오톡 ID 또는 한국 연락처가 꼭 필요합니다.</p>' : "") +
         '<div data-key="rules_' + s.id + '">' + (r.warns || []).map(function (w) { return '<p class="warn' + (w.hard ? " big" : "") + '">' + (w.hard ? "🚨 " : "⚠ ") + esc(w.t) + "</p>"; }).join("") +
         (r.weekFix ? '<button class="btn sm gold" data-weekfix="' + i + '">' + (r.weekFix === "we" ? "주말 요금 상품으로 바꾸기" : "주중 요금 상품으로 바꾸기") + "</button>" : "") +
         ((r.extra || []).length || (r.notes || []).length ? '<p class="note" style="margin:8px 0 0">손님 견적에 자동으로 들어가는 줄: ' + (r.extra || []).map(function (x) { return esc(x.label + " " + priceStr(x.p)); }).concat((r.notes || []).map(esc)).join(" / ") + "</p>" : "") + "</div>" +
