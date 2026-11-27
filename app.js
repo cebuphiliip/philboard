@@ -28,6 +28,9 @@
   function save() { store.set("cart", state.cart); store.set("cust", state.cust); store.set("rate2", state.rate); store.set("fx2", state.fx); store.set("fxInfo", state.fxInfo); store.set("bookings", state.bookings); store.set("tomb", state.tomb); store.set("stay3", state.stay); store.set("edited", state.edited); store.set("editedBase", state.editedBase); store.set("openId", state.openId); store.set("stayOpenId", state.stayOpenId); }
   /* 손으로 고친 글: 칸을 바꿔도 지우지 않고 남긴다. 그 뒤 계산이 바뀌면 '계산이 바뀌었습니다' 표시만 하고, [원래대로]를 눌러야 새 계산 글로 바뀐다(감사 PB-A-10·D-14). 새 견적·불러오기 때만 비운다 */
   function clearEdited(test) { Object.keys(state.edited).forEach(function (k) { if (!test || test(k)) { delete state.edited[k]; delete state.editedBase[k]; } }); }
+  /* '어디서 보고 오셨나요?' 줄은 예약폼 전부에서 뺐다(원장 261127-97·105·112) — 손으로 고쳐 저장해 둔 옛 글·장부에서 불러온 글에서도 그 줄을 지운다 */
+  function dropWhere(t) { return typeof t === "string" ? t.replace(/^[☝\s]*어디서\s*보고\s*오셨나요[^\n]*(\n|$)/gm, "") : t; }
+  Object.keys(state.edited).forEach(function (k) { state.edited[k] = dropWhere(state.edited[k]); });
   var isStayOut = function (k) { return /^(stay_|sol_)/.test(k); };
   function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "", sitter: "", sitterN: "", paxText: "" }; }
   function kidIn(s, e) { return s.items.some(function (it) { return (e.q[it.key] || 0) > 0 && /아동|키즈|어린이|kid/i.test(it.label + " " + it.key); }); } // 아동 코스·아동권을 담았나(감사 PB-B-20)
@@ -1426,7 +1429,7 @@
   function openBk(id) { return id ? state.bookings.filter(function (x) { return x.id === id; })[0] || null : null; }
   function emptyEntries() { return state.cart.filter(function (e) { return !Calc.entry(e).pax; }).map(function (e) { return shopById(e.shopId).name; }); }
   function pickEdited(test) { var o = {}, b = {}; Object.keys(state.edited).forEach(function (k) { if (test(k)) { o[k] = state.edited[k]; if (state.editedBase[k] != null) b[k] = state.editedBase[k]; } }); return Object.keys(o).length ? { t: o, b: b } : null; }
-  function putEdited(x) { if (!x || !x.t) return; Object.keys(x.t).forEach(function (k) { state.edited[k] = x.t[k]; if (x.b && x.b[k] != null) state.editedBase[k] = x.b[k]; }); }
+  function putEdited(x) { if (!x || !x.t) return; Object.keys(x.t).forEach(function (k) { state.edited[k] = dropWhere(x.t[k]); if (x.b && x.b[k] != null) state.editedBase[k] = x.b[k]; }); }
   var isQuoteOut = function (k) { return !isStayOut(k); };
   function syncSoon() { if (!sb || !sync.user) return; clearTimeout(sync.timer); sync.timer = setTimeout(doSync, 800); }
   function syncMsg(m) { sync.msg = m; var el = $("#syncMsg"); if (el) el.textContent = m; }
