@@ -320,7 +320,7 @@
       var t = "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n\n";
       t += state.cart.map(function (e) { return Text.intro(shopById(e.shopId)); }).join("\n\n");
       t += "\n\n정확한 견적과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n";
-      // '어디서 보고 오셨나요?' 줄은 업체 문의 답변에서 뺌(원장 261127-97 — 숙소·솔타나 예약폼은 세백 유입 집계용으로 그대로)
+      // '어디서 보고 오셨나요?' 줄은 예약폼 전부에서 뺌(원장 261127-97 업체·261127-105 숙소·풀빌라·솔타나·비비안)
       state.cart.forEach(function (e, i) {
         var shop = shopById(e.shopId);
         t += "\n■ " + shop.name + "\n" + Text.rows(e, i).filter(function (w) { return w.only !== "quote"; }).map(function (w) { return w.l == null ? w.h + "\n" : w.h + ": " + w.v + "\n"; }).join("");
@@ -677,13 +677,13 @@
           "객실 타입: " + (picked ? c.lines.map(function (x) { return x.type; }).join(", ") : ""), "객실 수: " + (picked ? c.lines.map(function (x) { return x.rooms + "객실"; }).join(", ") : ""),
           "인원(성인 / 아동): " + (r.checkin || picked ? "성인 " + c.adults + "명" + (c.kids ? " / 아동 " + c.kids + "명" : "") : ""),
           "아동 나이(만 나이, 아동별로 · 없으면 '없음'): " + (r.kidAges ? r.kidAges.split(/[^0-9]+/).filter(Boolean).map(function (n) { return n + "세"; }).join(", ") : ""),
-          "대표자 영문 성함(여권과 동일): ", "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "요청 사항(침대 타입·공항 픽업 등): ", "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): "].join("\n");
+          "대표자 영문 성함(여권과 동일): ", "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "요청 사항(침대 타입·공항 픽업 등): "].join("\n");
     },
     villaAsk: function () {
       var v = state.stay.villa, c = Stay.villa();
       return "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n" +
         ["풀빌라: " + c.d.name + " (" + c.d.rooms + ")", "체크인 날짜: " + dateKo(v.checkin), "박수: " + c.nights + "박", "인원(성인 / 아동은 만 나이): ", "대표자 성함: " + (state.stay.cust.name || ""),
-          "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "도착 항공편·도착 시간: ", "요청 사항(조식·바비큐·공항 픽업 등): ", "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): "].join("\n");
+          "카카오톡 ID 또는 연락처: " + (state.stay.cust.contact || ""), "도착 항공편·도착 시간: ", "요청 사항(조식·바비큐·공항 픽업 등): "].join("\n");
     },
     villa: function () {
       var v = state.stay.villa, d = ST.villas[+v.idx] || ST.villas[0], nights = Math.max(1, +v.nights || 1), blank = v.profit === "" || v.profit == null || isNaN(+v.profit), profit = blank ? (+ST.villaProfit || 0) : +v.profit;
@@ -753,7 +753,6 @@
     solAsk: function () {
       var s = state.stay.sol, c = Stay.sol(), L = [[c.hasIn ? "☝투숙타입&한국 출발 날짜(입국팩은 세부 도착일이 아니라 한국에서 출발하는 날)" : "☝투숙타입&체크인날짜", c.p.name + (s.checkin ? " / " + dateKo(s.checkin) : "")], ["☝이용항공편명", s.flight], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝대표자 영문성함", s.ename]];
       c.p.times.forEach(function (label, i) { L.push(["☝" + label, i ? s.t2 : s.t1]); });
-      L.push(["☝어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등)", ""]);
       L.push(["☝특이사항", Stay.solNote()]);
       return "안녕하세요, 솔타나콘도텔입니다. 문의해 주셔서 감사합니다.\n예약을 도와드릴 수 있도록 아래 내용을 채워서 보내 주시기 바랍니다.\n\n" + L.map(function (l) { return l[0] + ": " + (l[1] || ""); }).join("\n");
     },
@@ -802,8 +801,7 @@
       var s = state.stay.viv, c = Stay.viv(), L = [["☝투숙타입", "비비안 호텔 " + c.p.name]];
       if (c.hasIn) L.push(["☝입국팩 한국 출발 날짜(세부 도착일이 아니라 한국에서 출발하는 날)", c.inDate ? dateKo(c.inDate) : ""]);
       if (c.hasOut) L.push(["☝출국팩 체크인 날짜", c.outDate ? dateKo(c.outDate) : ""]);
-      L.push(["☝이용 항공편명" + (c.p.key === "inout" ? "(도착편·출발편 둘 다)" : ""), s.flight], ["☝객실 수·침대(퀸 침대 1개 / 트윈 침대 2개)", c.rooms + "객실" + (s.bed ? " / " + s.bed : "")], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝묵으실 분 영문 성함", s.ename],
-        ["☝어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등)", ""], ["☝특이사항", s.note]);
+      L.push(["☝이용 항공편명" + (c.p.key === "inout" ? "(도착편·출발편 둘 다)" : ""), s.flight], ["☝객실 수·침대(퀸 침대 1개 / 트윈 침대 2개)", c.rooms + "객실" + (s.bed ? " / " + s.bed : "")], ["☝각방당 인원구성(아동은 만 나이)", s.pax], ["☝묵으실 분 영문 성함", s.ename], ["☝특이사항", s.note]);
       return "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n비비안 호텔 예약을 도와드릴 수 있도록 아래 내용을 채워서 보내 주시기 바랍니다.\n\n" + L.map(function (l) { return l[0] + ": " + (l[1] || ""); }).join("\n");
     },
     vivText: function () {
