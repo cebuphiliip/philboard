@@ -470,6 +470,8 @@
     return 1;
   }
   // 특별요금(ST.specialRates — 제이파크 3박 특별요금 등, 감사 PB-D-20): 견적 날짜(td)가 판매기간 안, 투숙일(dt)이 투숙기간 안, minN 박 이상일 때 그 객실의 마크업 전 1박 요금
+  // 써차지 면제(ST.surWaivers — 마리바고 12/20~24 등 TMJ 업체 공지, 원장 261127-66): TMJ 요금표(hotels.js)는 그대로 두고, 그 숙소·그 써차지·그 날짜면 써차지와 최소박 조건만 빼고 본다
+  function surWaived(h, x, dt) { return (ST.surWaivers || []).some(function (w) { return h.name.indexOf(w.match) >= 0 && (!w.sur || String(x.name || "").toUpperCase().indexOf(w.sur) >= 0) && dt >= w.from && dt <= w.to; }); }
   function spRule(h) { var o = null; if (h) (ST.specialRates || []).forEach(function (x) { if (h.name.indexOf(x.match) === 0) o = x; }); return o; }
   function spRate(h, type, dt, nights, td) {
     var x = spRule(h); if (!x || x.rates[type] == null || nights < (x.minN || 1) || !(td >= x.sell[0] && td <= x.sell[1])) return null;
@@ -502,7 +504,7 @@
           if (sp != null && (dy || sp < rv)) { rv = sp; spN++; promo = false; nx = false; dy = false; } // 특별요금이 그 날 요금보다 쌀 때만(써차지는 아래에서 그대로 붙음)
           if (dy) dynN++;
           base += rv / pkN + mg; if (promo) promoN++; if (nx) nextN++;
-          if (h && dt) h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0)) { sur += x.amt[d.type] / pkN; surN++; if (surNames.indexOf(x.name) < 0) surNames.push(x.name); } });
+          if (h && dt) h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0) && !surWaived(h, x, dt)) { sur += x.amt[d.type] / pkN; surN++; if (surNames.indexOf(x.name) < 0) surNames.push(x.name); } });
         }
         base = Math.round(base); sur = Math.round(sur);
         return { type: d.type, rooms: s.rooms, beds: bd, night1: Math.round((d.rate || 0) / pkN) + mg, base: base * s.rooms, sur: sur * s.rooms, surN: surN, surNames: surNames, promoN: promoN, nextN: nextN, dynN: dynN, spN: spN, pkgN: d.pkgN || 0, total: (base + sur) * s.rooms, profit: mg * nights * s.rooms };
@@ -516,7 +518,7 @@
           dates.forEach(function (dt) {
             var promo = d.promo && promoSell && h.stay && dt >= h.stay[0] && dt <= h.stay[1], tv = promo ? d.promo : d.rate, sp = spRate(h, d.type, dt, nights, td);
             tm += sp != null && sp < tv ? sp : tv; pp += pr;
-            var ts = 0; h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0)) ts += x.amt[d.type]; });
+            var ts = 0; h.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to && x.amt[d.type] && (!x.dow || x.dow.indexOf(new Date(dt + "T00:00:00Z").getUTCDay()) >= 0) && !surWaived(h, x, dt)) ts += x.amt[d.type]; });
             var ps = ts; if (PC.sur) { ps = 0; PC.sur.forEach(function (x) { if (dt >= x.from && dt <= x.to) ps += x.amt; }); }
             tm += ts; pp += ps; if (ts || ps) anySur = true;
           });
@@ -549,6 +551,7 @@
       var checks = []; if (r.reqNote) infos.push("손님 요청사항: " + r.reqNote);
       if (ageUnknown) checks.push("아동 나이가 입력되지 않았습니다 — 갈라·의무식·아동 조식은 아동 나이로 대상이 갈립니다. 지금은 아동 전원 대상으로 계산했으니 나이를 넣어 확인하세요.");
       if (h) (ST.internalNotes || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && (!x.rooms || ((r.picks || []).length ? r.picks : h.rooms).some(function (q) { return x.rooms.indexOf(q.type) >= 0; }))) checks.push(x.note); }); // rooms: 그 객실을 고른 견적에만(객실을 안 고르면 전체 객실이 나가므로 그 숙소에 해당 객실이 있으면)
+      if (h && dates.length) (ST.surWaivers || []).forEach(function (w) { if (w.note && h.name.indexOf(w.match) >= 0 && dates.some(function (dt) { return dt >= w.from && dt <= w.to; }) && checks.indexOf(w.note) < 0) checks.push(w.note); });
       if (h && dates.length) (ST.dateChecks || []).forEach(function (x) { if (h.name.indexOf(x.match) >= 0 && x.ranges.some(function (rg) { return dates.some(function (dt) { return dt >= rg[0] && dt <= rg[1]; }); })) checks.push(x.note); });
       if (h && extras.some(function (x) { return x.name.indexOf("갈라 디너") === 0; })) {
         if (/TBA|TO BE ADVIS/i.test(h.remark || "")) checks.push("갈라 디너 체크요망: TMJ 비고에 금액·내용이 미정(TBA)으로 표기돼 있습니다. 갈라디너 내용을 숙소에 확인하세요.");
@@ -597,7 +600,7 @@
       var exTotal = extras.reduce(function (a, x) { return a + x.total; }, 0), minWarn = [], MIN = /MIN\.?\s*(?:OF\s*)?(\d+)\s*N/i, mm;
       if (h) {
         if ((mm = MIN.exec(h.name)) && nights < +mm[1]) minWarn.push("이 숙소는 최소 " + mm[1] + "박부터 예약됩니다(지금 " + nights + "박).");
-        h.sur.forEach(function (x) { var m2 = MIN.exec(x.name); if (m2 && nights < +m2[1] && dates.some(function (dt) { return dt >= x.from && dt <= x.to; })) minWarn.push(x.name.replace(/\s*\(.*$/, "") + " 기간(" + x.from + " ~ " + x.to + ")은 최소 " + m2[1] + "박입니다(지금 " + nights + "박)."); });
+        h.sur.forEach(function (x) { var m2 = MIN.exec(x.name); if (m2 && nights < +m2[1] && dates.some(function (dt) { return dt >= x.from && dt <= x.to && !surWaived(h, x, dt); })) minWarn.push(x.name.replace(/\s*\(.*$/, "") + " 기간(" + x.from + " ~ " + x.to + ")은 최소 " + m2[1] + "박입니다(지금 " + nights + "박)."); });
       }
       var hardWarn = [], remarkLines = [];
       lines.forEach(function (x) {
