@@ -292,7 +292,11 @@
       }
       if (dropAir && bk) {
         if (pk.airport && r.pax < pk.airport[bk]) W("출국일 공항 드랍은 " + pk.airportText + "부터 됩니다(지금 " + r.pax + "명 · " + mm + "분) — 드랍 장소나 코스를 확인해 주세요.", true);
-        if (pk.airportFree && r.pax < pk.airportFree[bk]) N(pk.airportFeeText);
+        if (pk.airportFree && r.pax < pk.airportFree[bk]) {
+          /* 라움: 2~3명은 공항 드랍 추가금(팀당 500페소, 현장)을 금액에 넣는다 — 원장 261127-76 */
+          if (pk.airportFee && r.pax >= pk.airportFee.min) { X(pk.airportFee.label, { on: pk.airportFee.on }, 1, "팀"); N(pk.airportFee.text); }
+          else { N(pk.airportFeeText); if (pk.airportAsk) W(pk.airportAsk, false); }
+        } else if (pk.airportFree && pk.airportOkText) N(pk.airportOkText);
       }
       if (dropAir && pk.airportNote) N(pk.airportNote);
     }
