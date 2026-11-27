@@ -319,43 +319,58 @@
     ask: function () {
       var t = "안녕하세요, " + B + "입니다. 문의해 주셔서 감사합니다.\n\n";
       t += state.cart.map(function (e) { return Text.intro(shopById(e.shopId)); }).join("\n\n");
-      t += "\n\n정확한 견적과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n\n";
-      t += "대표자 성함: " + state.cust.name + "\n" + (state.cart.some(function (e) { return showContact(shopById(e.shopId)); }) ? "카카오톡 ID 또는 연락처: " + state.cust.contact + "\n" : "") + "어디서 보고 오셨나요?(투윙스 카페·블로그·세부백배즐기기·에어비앤비 등): \n";
-      state.cart.forEach(function (e) {
-        var shop = shopById(e.shopId), mas = shop.cat === "마사지", pt = pickupTimeShop(shop);
-        var rdAsk = shop.rounds && (isRounds(shop, e) || !shop.items.some(function (it) { return e.q[it.key] > 0; })); // 골프: 라운드마다 한 줄(원장 261125-70)
-        t += "\n■ " + shop.name + "\n" + (rdAsk ? "라운드마다 한 줄씩 적어 주세요(날짜 / 골프장 / 인원 / 희망 티업 시간 — 여러 번 치시면 2라운드·3라운드 줄을 더해 주세요)\n" +
-          (isRounds(shop, e) ? e.rounds : [{}]).map(function (rd, j) { return (j + 1) + "라운드: " + [rd.date ? dateKo(rd.date) : "", courseName(shop, rd.course), +rd.pax ? rd.pax + "명" : "", rd.time || ""].filter(Boolean).join(" / ") + "\n"; }).join("")
-          : "이용 날짜: " + dateKo(e.date) + "\n");
-        if (mas) {
-          if (shop.needStart) t += "마사지 시작 희망 시간: " + e.start + "\n";
-          t += "인원과 코스(예: 아로마 90분 2명): " + Text.courses(e) + "\n";
-          if (kidIn(shop, e)) t += "아동 만 나이: " + e.ages + "\n";
-          if (shop.optionLabel) t += shop.optionLabel + ": " + e.option + "\n";
-          if (shop.sitter) t += "보모 추가(필요하실 때만 — " + shop.sitter.map(function (x) { return x[0] + "분 " + num(x[1]) + "페소"; }).join(" / ") + "): " + (sitterOf(shop, e) ? sitterStr(sitterOf(shop, e)).replace("보모 ", "") : "") + "\n";
-        } else {
-          if (shop.timeOptions) t += "선택(" + shop.timeOptions.join(" / ") + "): " + e.time + "\n";
-          if (shop.optionLabel) t += shop.optionLabel + ": " + e.option + "\n";
-          // 상품이 많은 업체(골프 18·모뉴멘트 8)는 고른 상품만, 아직 안 골랐으면 빈칸 한 줄(감사 PB-C-14)
-          var many = shop.items.length > 6, picked = shop.items.filter(function (it) { return e.q[it.key] > 0; });
-          if (!rdAsk) t += (many ? "상품·인원: " + picked.map(function (it) { return lab(it, e) + " " + e.q[it.key] + unitOf(it); }).join(" / ") : "인원: " + shop.items.map(function (it) { return lab(it, e) + " " + (e.q[it.key] || "") + unitOf(it); }).join(" / ")) + "\n";
-          if (shop.paxText) t += shop.paxText + ": " + (e.paxText || "") + "\n";
-          if (!shop.noAges) t += "아동 만 나이: " + e.ages + "\n";
-        }
-        t += (shop.noPickup ? "" : "픽업 장소: " + e.pickup + "\n" + (pt ? "픽업 희망 시간: " + e.time + "\n" : "") + "드랍 장소: " + e.drop + "\n") + "요청 사항: " + e.note + "\n";
-        if (shop.form === "clubcebu" || shop.form === "lokal") t += "예약자 전원 영문 이름·생년월일" + (shop.form === "clubcebu" ? "·성별" : "") + ": " + e.roster + "\n";
-        if (shop.askNote) t += "\n" + shop.askNote + "\n";
+      t += "\n\n정확한 견적과 예약 가능 여부를 확인해 드릴 수 있도록, 아래 빈칸을 채워서 보내 주시기 바랍니다.\n";
+      // '어디서 보고 오셨나요?' 줄은 업체 문의 답변에서 뺌(원장 261127-97 — 숙소·솔타나 예약폼은 세백 유입 집계용으로 그대로)
+      state.cart.forEach(function (e, i) {
+        var shop = shopById(e.shopId);
+        t += "\n■ " + shop.name + "\n" + Text.rows(e, i).filter(function (w) { return w.only !== "quote"; }).map(function (w) { return w.l == null ? w.h + "\n" : w.h + ": " + w.v + "\n"; }).join("");
       });
       return t.trim();
     },
+    /* 업체 한 곳의 예약 칸 — 문의 답변(빈칸 양식)과 견적·입금 안내(손님이 채운 예약 내용)가 같은 칸을 쓴다(원장 261127-97).
+       한 칸 = { l: 이름, v: 값, h: 문의 답변에 나가는 이름(예시 포함), q: 견적에 나가는 값(채운 것만 나감), only: "ask"(문의 답변에만)·"quote"(견적에만) } */
+    rows: function (e, i) {
+      var shop = shopById(e.shopId), mas = shop.cat === "마사지", pt = pickupTimeShop(shop), R = [];
+      var A = function (l, v, h, qv, only) { v = v == null ? "" : String(v); R.push({ l: l, v: v, h: h || l, q: qv == null ? v : String(qv), only: only }); };
+      var rdAsk = shop.rounds && (isRounds(shop, e) || !shop.items.some(function (it) { return e.q[it.key] > 0; })); // 골프: 라운드마다 한 줄(원장 261125-70)
+      if (rdAsk) {
+        A(null, "", "라운드마다 한 줄씩 적어 주세요(날짜 / 골프장 / 인원 / 희망 티업 시간 — 여러 번 치시면 2라운드·3라운드 줄을 더해 주세요)", "", "ask");
+        (isRounds(shop, e) ? e.rounds : [{}]).forEach(function (rd, j) { A((j + 1) + "라운드", [rd.date ? dateKo(rd.date) : "", courseName(shop, rd.course), +rd.pax ? rd.pax + "명" : "", rd.time || ""].filter(Boolean).join(" / ")); });
+      } else A("이용 날짜", dateKo(e.date));
+      // 대표자 성함(+연락처)은 첫 업체의 이용 날짜와 인원·코스 사이(원장 261127-97)
+      if (!i) { A("대표자 성함", state.cust.name); if (state.cart.some(function (x) { return showContact(shopById(x.shopId)); })) A("카카오톡 ID 또는 연락처", state.cust.contact); }
+      if (mas) {
+        if (shop.needStart) A("마사지 시작 희망 시간", e.start);
+        A("인원과 코스", Text.courses(e), "인원과 코스(예: 아로마 90분 2명)");
+        if (kidIn(shop, e)) A("아동 만 나이", e.ages);
+        if (shop.optionLabel) A(shop.optionLabel, e.option);
+        if (shop.sitter) A("보모 추가", sitterOf(shop, e) ? sitterStr(sitterOf(shop, e)).replace("보모 ", "") : "", "보모 추가(필요하실 때만 — " + shop.sitter.map(function (x) { return x[0] + "분 " + num(x[1]) + "페소"; }).join(" / ") + ")");
+      } else {
+        if (shop.timeOptions) A("선택", e.time, "선택(" + shop.timeOptions.join(" / ") + ")");
+        else if (!pt && !rdAsk) A("시간", "", null, e.time, "quote"); // '시간(필요 시)' 칸 — 문의 답변엔 없고 견적엔 넣었을 때만
+        if (shop.optionLabel) A(shop.optionLabel, e.option);
+        // 상품이 많은 업체(골프 18·모뉴멘트 8)는 고른 상품만, 아직 안 골랐으면 빈칸 한 줄(감사 PB-C-14). 견적에는 고른 상품만
+        var many = shop.items.length > 6, picked = shop.items.filter(function (it) { return e.q[it.key] > 0; }), pv = picked.map(function (it) { return lab(it, e) + " " + e.q[it.key] + unitOf(it); }).join(" / ");
+        if (!rdAsk) { if (many) A("상품·인원", pv); else A("인원", shop.items.map(function (it) { return lab(it, e) + " " + (e.q[it.key] || "") + unitOf(it); }).join(" / "), null, pv); }
+        if (shop.paxText) A(shop.paxText, e.paxText);
+        if (!shop.noAges) A("아동 만 나이", e.ages);
+      }
+      if (!shop.noPickup) { A("픽업 장소", e.pickup); if (pt) A("픽업 희망 시간", e.time); A("드랍 장소", e.drop); }
+      A("요청 사항", e.note);
+      if (shop.form === "clubcebu" || shop.form === "lokal") A("예약자 전원 영문 이름·생년월일" + (shop.form === "clubcebu" ? "·성별" : ""), e.roster);
+      if (shop.askNote) A(null, "", "\n" + shop.askNote, "", "ask");
+      return R;
+    },
+    /* 견적·입금 안내에 넣는 예약 내용 — 문의 답변 칸 가운데 채운 것만(원장 261127-97) */
+    filled: function (e, i) { return Text.rows(e, i).filter(function (w) { return w.only !== "ask" && w.l != null && w.q.trim(); }).map(function (w) { return w.l + ": " + w.q.trim() + "\n"; }).join(""); },
     courses: function (e) { var shop = shopById(e.shopId); if (isRounds(shop, e)) return Calc.entry(e).lines.map(function (l) { return roundHead(l) + " " + courseName(shop, e.rounds[l.rd].course) + " " + l.n + "명" + (l.time ? " (희망 티업 " + l.time + ")" : ""); }).join(" / "); return shop.items.filter(function (it) { return e.q[it.key] > 0; }).map(function (it) { return lab(it, e) + " " + e.q[it.key] + unitOf(it); }).join(", "); },
     quote: function () {
       var c = Calc.cart(), t = "안녕하세요, " + B + "입니다. 요청하신 내용으로 견적을 안내해 드립니다.\n";
       c.rows.forEach(function (r, i) {
-        var e = state.cart[i], pt = pickupTimeShop(r.shop);
-        var hd = [pt && e.time ? "픽업 " + e.time : "", e.start ? "마사지 시작 " + e.start : ""].filter(Boolean); // 오션스파 시작 시간도 머리줄에(감사 PB-B-15)
-        var rdq = isRounds(r.shop, e), shownNote = {};
-        t += "\n■ " + r.shop.name + (rdq ? " — " + r.lines.length + "라운드" : (e.date ? " — " + dateKo(e.date) : "") + (!pt && e.time ? " " + e.time : "") + (hd.length ? " (" + hd.join(" · ") + ")" : "")) + "\n";
+        var e = state.cart[i], rdq = isRounds(r.shop, e), shownNote = {};
+        // 머리줄 아래에 문의 답변의 예약 내용(날짜·대표자·인원·코스·픽업·요청 사항 등 채운 칸)을 그대로, 그 아래 [요금](원장 261127-97). 날짜·픽업·마사지 시작 시간은 예약 내용 줄로 옮김(감사 PB-B-15)
+        var fd = Text.filled(e, i);
+        t += "\n■ " + r.shop.name + (rdq ? " — " + r.lines.length + "라운드" : "") + "\n" + (fd ? fd + "[요금]\n" : "");
         r.lines.forEach(function (l) { // 골프 라운드는 줄 앞에 'N라운드 날짜', 뒤에 희망 티업(원장 261125-70). 같은 안내(카트·캐디피 불포함)는 한 번만
           var nt1 = l.it.note && (!rdq || !shownNote[l.it.note]) ? (shownNote[l.it.note] = 1, "  └ " + l.it.note + "\n") : "";
           t += "· " + (l.rd != null ? roundHead(l) + " " : "") + lab(l.it, e) + " " + l.n + unitOf(l.it) + (l.it.sp ? " × (" + priceStr(l.it.sp) + ")" : "") + (l.time ? " · 희망 티업 " + l.time : "") + "\n" + nt1;
@@ -1112,7 +1127,7 @@
       '<div class="card" style="margin-top:10px"><div class="row"><h2 class="grow">요금</h2>' + (PRIV.ok ? '<button class="btn sm ' + (nv ? "" : "ghost") + '" id="toggleNet">' + (nv ? "넷가 숨기기" : "넷가 보기") + "</button>" : '<span class="note">🔒 넷가는 로그인 후</span>') + '</div><div class="scroll"><table><tr><th>구분</th><th>공식 요금</th><th>' + B + " 스페셜</th>" + (nv ? "<th>넷가(내부)</th><th>1인 수익</th>" : "") + "</tr>" + rows + "</table></div>" +
       (nv ? '<p class="warn">넷가·수익은 이 화면에서만 보이고, 복사되는 글에는 들어가지 않습니다.</p>' : "") +
       (s.refund ? '<p class="note">환불: ' + esc(s.refund) + "</p>" : "") + (s.memo ? '<p class="note">메모(내부용): ' + esc(s.memo) + "</p>" : "") + "</div>" +
-      '<div class="card" style="margin-top:10px"><h2>손님께 바로 보내기</h2>' + (s.oneBox ? outBox("intro_" + s.id, s.oneBox, Text.intro(s)) : outBox("intro_" + s.id, "업체 소개 + 상세 글 링크", Text.intro(s)) + outBox("price_" + s.id, "요금 안내(공식 요금 / " + B + " 스페셜)", Text.price(s))) + outBox("after_" + s.id, "예약 완료 후 안내", Text.after(s, "")) + "</div>";
+      '<div class="card" style="margin-top:10px"><h2>손님께 바로 보내기</h2>' + (s.oneBox ? outBox("intro_" + s.id, s.oneBox, Text.intro(s)) : outBox("intro_" + s.id, "업체 소개 + 상세 글 링크", Text.intro(s)) + outBox("price_" + s.id, "요금 안내(공식 요금 / " + B + " 스페셜)", Text.price(s))) + "</div>"; // '예약 완료 후 안내' 칸은 뺌 — 견적 작성 ③ 입금 확인·완료 글로 보낸다(원장 261127-97)
   }
   function field(e, i, key, label, type, opts) {
     var v = esc(e[key] || ""), at = 'data-e="' + i + '" data-k="' + key + '"', dk = ' data-key="f_' + e.shopId + "_" + key + '"';
