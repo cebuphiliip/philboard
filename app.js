@@ -32,7 +32,7 @@
   function dropWhere(t) { return typeof t === "string" ? t.replace(/^[☝\s]*어디서\s*보고\s*오셨나요[^\n]*(\n|$)/gm, "") : t; }
   Object.keys(state.edited).forEach(function (k) { state.edited[k] = dropWhere(state.edited[k]); });
   var isStayOut = function (k) { return /^(stay_|sol_)/.test(k); };
-  function newEntry(id) { return { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "", sitter: "", sitterN: "", paxText: "" }; }
+  function newEntry(id) { var e = { shopId: id, date: "", time: "", start: "", q: {}, ages: "", pickup: "", drop: "", luggage: "", option: "", roster: "", note: "", sitter: "", sitterN: "", paxText: "" }, s = shopById(id); return s && s.rent ? Object.assign(e, rcDefaults()) : e; } // 렌트카 기본값(결제 방식·1대·자동 판정)
   function kidIn(s, e) { return s.items.some(function (it) { return (e.q[it.key] || 0) > 0 && /아동|키즈|어린이|kid/i.test(it.label + " " + it.key); }); } // 아동 코스·아동권을 담았나(감사 PB-B-20)
 
   /* ---------- 요금 표기 ---------- */
@@ -97,6 +97,7 @@
   var MEMBER_RATE = 0.3; // 카페 회원 혜택 예약금 할인율(원장 261120-108·261125-72)
   var Calc = {
     entry: function (e) {
+      if (shopById(e.shopId).rent) return rentEntry(shopById(e.shopId), e); // 렌트카는 차종·시간으로 따로 계산(원장 261128-28)
       var shop = shopById(e.shopId), r = { lines: [], sp: ZERO(), off: ZERO(), net: ZERO(), cost: ZERO(), offKnown: true, noPrice: false, pax: 0, shop: shop };
       /* 골프 라운드(원장 261125-70): 라운드마다 날짜·인원으로 요금 칸을 골라 한 줄씩. 라운드가 없는 옛 기록은 e.q 그대로 */
       var src = isRounds(shop, e) ? e.rounds.map(function (rd, j) { var it = roundItem(shop, rd), n = +rd.pax || 0; return it && n ? { it: it, n: n, rd: j, date: rd.date || "", time: rd.time || "" } : null; }).filter(Boolean)
@@ -306,10 +307,138 @@
   }
   function hardWarns(onlyShop) { return Calc.cart().rows.filter(function (r) { return !onlyShop || r.shop === onlyShop; }).reduce(function (a, r) { return a.concat((r.warns || []).filter(function (w) { return w.hard; }).map(function (w) { return r.shop.name + ": " + w.t; })); }, []); }
 
+  /* ---------- 렌트카(내맘대로 시티투어) — 사장님 11-28(원장 261128-28) ----------
+     일정이 이미 정해진 건을 넣어 ①~④ 글을 만든다(시티투어 계산기 기능은 넣지 않음). 칸: 날짜·출발 시각(e.time)·출발 장소(e.pickup)·성인/아동(rcAdults·rcKids)·짐(e.luggage)
+     ·들를 곳(rcStops)·도착 장소(e.drop)·도착 예정 시각(rcArrive)·차종(rcCar)·대수(rcCars)·이용 시간(rcHours — '자동'이면 출발~도착 시각, 시간 단위 올림, 최소 2시간)
+     ·산 위(rcMtn)·시라오(rcSirao) — '자동'이면 장소 낱말로 판정·결제 방식(rcPay)·영어 메모(rcEn)·특이사항(e.note).
+     결제 방식: 사장님이 업체에 결제(기본) = 손님가 달러(예약 시 결제, 원장 261104-29 사전결제) / 손님이 업체에 직접 결제 = 넷가 페소 그대로(수익 0, 지인·가족용).
+     손님 요금은 시라오만 가도 산 위 10 + 시라오 10달러(원장 261118-63). 넷가는 업체표 G줄대로 간 곳만(시라오만이면 600페소) */
+  var RC_PAY = ["사장님이 업체에 결제(투윙스 요금)", "손님이 업체에 직접 결제(넷가 · 지인·가족용)"], RC_AUTO = "자동", RC_HAUTO = "자동(출발~도착 시각)";
+  var MON_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], DOW_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function rcDefaults() { return { rcPay: RC_PAY[0], rcCar: "", rcCars: "1대", rcAdults: "", rcKids: "0명", rcStops: "", rcArrive: "", rcHours: RC_HAUTO, rcMtn: RC_AUTO, rcSirao: RC_AUTO, rcEn: "" }; }
+  function rcGuest(e) { return /^손님/.test(e.rcPay || ""); }
+  function rcItem(shop, k) { return shop.items.filter(function (it) { return it.key === k; })[0] || { sp: {}, net: {} }; }
+  function rcCar(shop, e) { return (shop.cars || []).filter(function (c) { return c[1] === e.rcCar || c[0] === e.rcCar; })[0] || null; }
+  function rcStops(e) { return String(e.rcStops || "").split(/\s*(?:[,，、\/\n]|→|->|>)\s*/).map(function (x) { return x.trim(); }).filter(Boolean); }
+  /* '감'·'안 감'은 그대로, '자동'(또는 빈칸)은 출발·들를 곳·도착 장소 낱말로 판정 */
+  function rcAuto(v, words, e) {
+    if (v === "감") return { on: true, auto: false, hit: "" };
+    if (v === "안 감") return { on: false, auto: false, hit: "" };
+    var m = words ? new RegExp(words, "i").exec([e.pickup, e.drop].concat(rcStops(e)).join(" / ")) : null;
+    return { on: !!m, auto: true, hit: m ? m[0] : "" };
+  }
+  function rcInfo(e) {
+    var shop = shopById(e.shopId), ad = parseInt(e.rcAdults, 10) || 0, kd = parseInt(e.rcKids, 10) || 0, dep = hm(e.time), arr = hm(e.rcArrive);
+    var span = dep != null && arr != null ? (arr - dep <= 0 ? arr - dep + 1440 : arr - dep) : null, manual = parseInt(e.rcHours, 10) || 0; // 도착이 출발보다 이르면 다음 날 도착
+    return { shop: shop, car: rcCar(shop, e), cars: Math.max(1, parseInt(e.rcCars, 10) || 1), adults: ad, kids: kd, pax: ad + kd, dep: dep, arr: arr, span: span, manual: manual,
+      hrs: manual || (span != null ? Math.max(2, Math.ceil(span / 60)) : 0), mtn: rcAuto(e.rcMtn, shop.mtnWords, e), sir: rcAuto(e.rcSirao, shop.siraoWords, e), guest: rcGuest(e), stops: rcStops(e) };
+  }
+  function spanKo(m) { return Math.floor(m / 60) + "시간" + (m % 60 ? " " + (m % 60) + "분" : ""); }
+  function rentEntry(shop, e) {
+    var x = rcInfo(e), r = { lines: [], sp: ZERO(), off: ZERO(), net: ZERO(), cost: ZERO(), offKnown: false, noPrice: false, pax: x.pax, shop: shop, extra: [], warns: [], notes: [], rent: x };
+    var W = function (t, hard) { if (!r.warns.some(function (w) { return w.t === t; })) r.warns.push({ t: t, hard: !!hard }); }, N = function (t) { if (t && r.notes.indexOf(t) < 0) r.notes.push(t); };
+    var L = function (label, short, spv, netv) { var it = { key: "rc" + r.lines.length, label: label, short: short, unit: "대", off: null, sp: spv, net: netv }; r.lines.push({ it: it, n: x.cars }); add(r.sp, spv, x.cars); add(r.net, netv, x.cars); };
+    var base = x.car ? rcItem(shop, x.car[0]) : null, hr = x.car ? rcItem(shop, x.car[4]) : null, mt = x.car ? rcItem(shop, x.car[5]) : null, sr = rcItem(shop, "sirao");
+    var nOn = function (it) { return ((it && it.net) || {}).on || 0; }, nh = base && base.net && base.net.hrs || 2, nex = Math.max(0, x.hrs - nh), netCar = nOn(base) + nex * nOn(hr);
+    if (!x.car || !x.hrs || (x.guest && !nOn(base))) r.noPrice = true;
+    else if (x.guest) { // 손님 직접 결제: 업체 넷가(페소) 그대로 — 현장결제·수익 0
+      L(x.car[1] + " " + x.hrs + "시간 (기본 " + nh + "시간 " + peso(nOn(base)) + (nex ? " + 추가 " + nex + "시간 × " + peso(nOn(hr)) : "") + ")", x.car[1] + " " + x.hrs + "시간", { on: netCar }, { on: netCar });
+      /* 산 위(탑스·레아)는 1시간, 시라오는 1시간 더 — 넷가도 그 차의 1시간 요금(다이다쉬, 원장 261128-41). 시라오만 가도 2시간 */
+      if (x.mtn.on || x.sir.on) L("산 위(탑스·레아 신전 등) 1시간 추가", "산 위", { on: nOn(hr) }, { on: nOn(hr) });
+      if (x.sir.on) L("시라오가든 1시간 더 추가", "시라오가든", { on: nOn(hr) }, { on: nOn(hr) });
+      N("요금은 이용 당일 기사님께 페소로 직접 결제해 주세요.");
+      N("예정보다 시간이 늘어나면 차량 1대당 1시간마다 " + peso(nOn(hr)) + "씩 추가됩니다(기사님께 직접).");
+    } else { // 사장님이 업체에 결제(지캐시): 손님가 달러, 예약 시 결제
+      var ex = Math.max(0, x.hrs - 2);
+      L(x.car[1] + " " + x.hrs + "시간 (기본 2시간 " + usd(base.sp.pre) + (ex ? " + 추가 " + ex + "시간 × " + usd(hr.sp.pre) : "") + ")", x.car[1] + " " + x.hrs + "시간", { pre: base.sp.pre + ex * hr.sp.pre }, { on: netCar });
+      if (x.mtn.on || x.sir.on) L("산 위 이동 추가", "산 위", { pre: mt.sp.pre }, { on: nOn(hr) }); // 시라오만 가도 산 위 10달러(원장 261118-63) — 넷가도 그 차 1시간(원장 261128-41)
+      if (x.sir.on) L("시라오가든 추가", "시라오가든", { pre: sr.sp.pre }, { on: nOn(hr) });
+      N("예정보다 시간이 늘어나면 차량 1대당 1시간마다 " + usd(hr.sp.pre) + "씩 추가됩니다.");
+    }
+    N("입장료·톨비·주차비·식사 등 개인 지출은 요금에 포함되지 않습니다."); // 원장 261118-64
+    r.profitKnown = true;
+    r.profitKrw = r.sp.dep - r.net.dep; r.profitPhp = r.sp.on - r.net.on; r.profitUsd = (r.sp.pre + r.sp.usd) - (r.net.pre + r.net.usd);
+    r.prepayKrw = 0; r.member = 0; r.payNow = r.sp.dep;
+    /* 확인(빨간 경고는 복사 전에 한 번 더 묻는다) */
+    if (!e.date) W("이용 날짜가 비었습니다 — 날짜를 넣어야 업체에 예약할 수 있습니다.", true);
+    else if (e.date < today()) W("이용 날짜(" + e.date + ")가 오늘보다 앞입니다 — 날짜를 확인하세요.", true);
+    if (!x.car) W("차종을 고르세요(밴 11인승 / 프리미엄밴 14인승 / 이노바 SUV 7인승).", true);
+    if (!x.pax) W("인원(성인·아동)을 넣으세요.", true);
+    else if (x.car && x.car[6]) { // 밴 정원: 짐 있으면 1대 최대 8명, 없으면 10명(원장 261113-44)
+      var bag = /있/.test(e.luggage || ""), cap = x.car[6][bag ? 0 : 1];
+      if (x.pax > cap * x.cars) W("인원 " + x.pax + "명인데 " + x.car[1] + " " + x.cars + "대입니다 — 밴은 " + (bag ? "짐이 있으면" : "짐이 없어도") + " 1대 최대 " + cap + "명입니다(원장 261113-44). 대수나 차종을 바꿔 주세요" + (bag && x.pax <= 10 * x.cars ? "(9~10명+짐이면 밴 1대+SUV 1대로 반씩 — 견적·업체폼은 손으로 고쳐 주세요)" : "") + ".", true);
+    } else if (x.car && x.pax > x.car[2] * x.cars) W("인원 " + x.pax + "명인데 " + x.car[1] + " " + x.cars + "대(" + x.car[2] * x.cars + "석)입니다 — 차종이나 대수를 바꿔 주세요.", true);
+    if (String(e.time || "").trim() && x.dep == null) W("출발 시각 '" + e.time + "'을(를) 읽지 못했습니다 — 12:00처럼 24시간으로 적어 주세요.", true);
+    if (String(e.rcArrive || "").trim() && x.arr == null) W("도착 예정 시각 '" + e.rcArrive + "'을(를) 읽지 못했습니다 — 21:00처럼 24시간으로 적어 주세요.", true);
+    if (!String(e.time || "").trim()) W("출발 시각이 비었습니다 — 업체 전달폼에 들어가야 합니다.", true);
+    if (!x.hrs) W("이용 시간을 정할 수 없습니다 — 도착 예정 시각을 넣거나 이용 시간을 고르세요.", true);
+    if (x.manual && x.span != null && Math.max(2, Math.ceil(x.span / 60)) !== x.manual) W("이용 시간을 " + x.manual + "시간으로 골랐는데 출발~도착 시각으로는 " + spanKo(x.span) + "입니다 — 맞는지 확인하세요.", false);
+    if (!String(e.pickup || "").trim()) W("출발 장소가 비었습니다 — 업체 전달폼에 들어가야 합니다.", false);
+    if (x.guest && x.car && !nOn(base)) W("넷가가 아직 안 열렸습니다(로그인 필요) — 손님 직접 결제 금액을 계산하지 못했습니다.", true);
+    var src = [e.pickup, e.drop, e.rcStops].join(" / ");
+    (shop.outWords || []).forEach(function (o) { if (reHit(o[0], src)) W(o[1], false); });
+    var ko = [e.pickup, e.drop].concat(x.stops).filter(function (p) { return enPlace(p).ko; });
+    if (ko.length) W("업체 전달폼(영어)에 한글 장소가 남았습니다: " + ko.join(", ") + " — ④ 업체 전달폼에서 영어로 고쳐 주세요.", false);
+    return r;
+  }
+  /* 렌트카 요금 한 줄 요약: 밴(11인승) 9시간 100달러 + 산 위 10달러 + 시라오가든 10달러 = 120달러 */
+  function rcTotalStr(r) {
+    var g = r.rent.guest, m = function (p, n) { return g ? peso((p.on || 0) * n) : usd((p.pre || 0) * n); }, tot = g ? peso(r.sp.on) : usd(r.sp.pre);
+    var parts = r.lines.map(function (l) { return l.it.short + (l.n > 1 ? " " + l.n + "대" : "") + " " + m(l.it.sp, l.n); });
+    return (parts.length > 1 ? parts.join(" + ") + " = " + tot : tot) + (g ? " (이용 당일 기사님께 직접 결제)" : "");
+  }
+  /* 장소 영어 이름(업체폼) — settings.placesEn. 영어로 쓴 곳은 그대로, 사전에 없는 한글이 남으면 ko:true */
+  var PLACE_EN = (function () { var o = {}, P = S.placesEn || {}; Object.keys(P).forEach(function (k) { o[k.replace(/\s+/g, "").toLowerCase()] = P[k]; }); return o; })();
+  var PLACE_KEYS = Object.keys(PLACE_EN).sort(function (a, b) { return b.length - a.length; });
+  function enPlace(t) {
+    t = String(t || "").trim(); if (!t) return { v: "", ko: false };
+    var k = t.replace(/\s+/g, "").toLowerCase(); if (PLACE_EN[k]) return { v: PLACE_EN[k], ko: false };
+    var v = t; PLACE_KEYS.forEach(function (key) { v = v.replace(new RegExp(key.split("").map(function (c) { return c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).join("\\s*"), "ig"), PLACE_EN[key]); });
+    return { v: v, ko: /[가-힣]/.test(v) };
+  }
+  function enTime(m, short) { var h = Math.floor(m / 60) % 24, mi = m % 60, h12 = h % 12 || 12; return h12 + (short && !mi ? "" : ":" + ("0" + mi).slice(-2)) + (h < 12 ? "am" : "pm"); }
+  function enDate(iso) { var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ""); if (!p) return iso || ""; return MON_EN[+p[2] - 1] + " " + (+p[3]) + " (" + DOW_EN[new Date(+p[1], +p[2] - 1, +p[3]).getDay()] + ")"; }
+  var Rent = {
+    /* ④ 업체 전달폼 — 현지 업체라 영어(사장님이 보내던 꼴 그대로, 원장 261128-28) */
+    vendor: function (e) {
+      var x = rcInfo(e), en = x.car ? x.car[3] : "van", P = function (t) { return enPlace(t).v; }, out = [];
+      out.push("booking " + (x.cars > 1 ? x.cars + " " + en + "s" : en) + " plz");
+      out.push("for " + (e.date ? enDate(e.date) : "(date)") + ". " + (x.dep != null ? enTime(x.dep) : e.time || "(time)") + " pick up @ " + (P(e.pickup) || "(pick up place)"));
+      if (x.hrs) out.push("open time " + x.hrs + "hours");
+      if (x.stops.length) out.push("(estimate itinerary: " + x.stops.map(P).join(", ") + ")");
+      if (String(e.drop || "").trim() || x.arr != null) out.push("drop off @ " + (P(e.drop) || "(drop off place)") + (x.arr != null ? " (around " + enTime(x.arr, true) + ")" : ""));
+      out.push("request clean " + en + ". " + x.pax + "guests" + (x.kids ? " (" + x.adults + " adults + " + x.kids + " kids)" : "") + (/있/.test(e.luggage || "") ? " with luggages" : /없/.test(e.luggage || "") ? ", no luggage" : ""));
+      if (String(e.rcEn || "").trim()) out.push(String(e.rcEn).trim());
+      out.push(x.guest ? "guest will pay you directly" : "I will send money thru gcash"); // 손님 직접 결제면 업체폼 끝에 영어로(원장 261128-28)
+      return out.join("\n");
+    },
+    /* 손님께 바로 보내기 — 요금 안내 */
+    price: function (shop) {
+      var t = "[" + shop.name + " 요금 안내]\n기사님이 운전하는 전용 차량 요금입니다(기사·유류비 포함, 가이드 없음).\n\n"; // 원장 260909-12
+      shop.cars.forEach(function (c) { var b = rcItem(shop, c[0]), h = rcItem(shop, c[4]); t += "· " + c[1] + ": 기본 2시간 " + usd(b.sp.pre) + ", 1시간 추가마다 " + usd(h.sp.pre) + "\n"; });
+      t += "\n· 막탄·만다우에·세부시티 안은 추가 요금이 없습니다.\n· 산 위(탑스·레아 신전 등)로 올라가면 차량 1대당 " + usd(rcItem(shop, "mtn").sp.pre) + "가 붙고, 시라오가든에 가면 " + usd(rcItem(shop, "sirao").sp.pre) + "가 한 번 더 붙습니다(시라오만 가도 " + usd(rcItem(shop, "mtn").sp.pre + rcItem(shop, "sirao").sp.pre) + ").\n· 그 밖의 지역(시외)은 상담 때 안내해 드립니다.\n";
+      t += "\n※ 입장료·톨비·주차비·식사 등 개인 지출은 포함되지 않습니다.\n※ " + D.priceDate + " 기준 요금이며, 금액은 상담을 진행할 때 한 번 더 확인해 드립니다.";
+      return t;
+    },
+    /* ③ 입금 확인·완료 */
+    after: function (shop, e) {
+      var x = rcInfo(e), r = Calc.entry(e), trip = [String(e.pickup || "").trim()].concat(x.stops, [String(e.drop || "").trim()]).filter(Boolean).join(" → ");
+      var t = "★ " + shop.name + " 예약이 완료되었습니다.\n";
+      t += "· 일정: " + [e.date ? dateKo(e.date).replace(/^\d{4}년 /, "") : "", String(e.time || "").trim() ? e.time + " 출발" : ""].filter(Boolean).join(" ") + (trip ? " (" + trip + ")" : "") + (String(e.rcArrive || "").trim() ? ", " + e.rcArrive + " 도착 예정" : "") + "\n";
+      if (x.car) t += "· 차량: " + x.car[1] + " " + x.cars + "대" + (x.hrs ? " · " + x.hrs + "시간" : "") + "\n";
+      t += "이용 하루 전 또는 당일 오전까지 픽업 차량 정보를 이 대화창으로 보내 드리겠습니다.";
+      if (x.guest && !r.noPrice) t += "\n요금(" + peso(r.sp.on) + ")은 이용 당일 기사님께 직접 결제해 주세요.";
+      /* 내맘대로 시티투어 안내 문구(원문 유지 — 원장 260909-17, hyeonjang 3절). 손님께 보내는 글이라 끝만 존댓말로 */
+      t += "\n\n[이용 안내]\n· 하차하실 때 내린 장소에서 몇 시에 다시 만날지 기사님과 정해 주세요. 기사님이 대기하지 못하는 장소가 많으니 다시 만날 장소에 1분 먼저 와 주세요.\n· 돈·장신구 등 귀중품은 꼭 소지하고 하차해 주세요.\n· 시간이 바뀌거나 문제가 생기면 이 대화창(카카오톡 채널)으로 연락해 주세요.";
+      return t;
+    }
+  };
+
   /* ---------- 손님용·업체용 문안 ---------- */
   var Text = {
     intro: function (shop) { return "[" + shop.name + "]\n" + shop.tagline + (shop.special ? "\n★ " + B + " 스페셜 혜택: " + shop.special : "") + (shop.post ? "\n▶ " + (shop.postLabel || "상세 안내") + ": " + shop.post : ""); },
     price: function (shop) {
+      if (shop.rent) return Rent.price(shop);
       var t = "[" + shop.name + " 요금 안내]\n", hasOff = shop.items.some(function (it) { return it.off; }), hasSp = shop.items.some(function (it) { return it.sp; });
       if (!hasSp) return t + "\n요금은 상품과 인원에 따라 달라 상담 때 정확히 안내해 드립니다." + (shop.post ? "\n▶ 상세 안내: " + shop.post : "");
       if (hasOff) { t += "\n■ 공식 요금 (업체에 직접 예약하실 때)\n"; shop.items.forEach(function (it) { if (it.off) t += "· " + it.label + ": " + priceStr(it.off) + "\n"; }); }
@@ -335,6 +464,21 @@
     rows: function (e, i) {
       var shop = shopById(e.shopId), mas = shop.cat === "마사지", pt = pickupTimeShop(shop), R = [];
       var A = function (l, v, h, qv, only) { v = v == null ? "" : String(v); R.push({ l: l, v: v, h: h || l, q: qv == null ? v : String(qv), only: only }); };
+      if (shop.rent) { // 렌트카: 날짜·출발·인원·짐·들를 곳·도착·차종·시간·요청 사항(원장 261128-28). 예상 요금은 문의 답변에만(견적엔 [요금]으로)
+        var x = rcInfo(e), rr = Calc.entry(e);
+        A("이용 날짜", dateKo(e.date));
+        if (!i) { A("대표자 성함", state.cust.name); if (state.cart.some(function (y) { return showContact(shopById(y.shopId)); })) A("카카오톡 ID 또는 연락처", state.cust.contact); }
+        A("출발 시각", e.time); A("출발 장소", e.pickup);
+        A("인원", x.pax ? "성인 " + x.adults + "명" + (x.kids ? " + 아동 " + x.kids + "명" : "") : "", "인원(성인·아동)");
+        A("짐(캐리어)", e.luggage, "짐(캐리어) 있으신지");
+        A("들를 곳", x.stops.join(" → "), "들를 곳(순서대로)");
+        A("도착 장소", e.drop); A("도착 예정 시각", e.rcArrive);
+        A("차종", x.car ? x.car[1] + " " + x.cars + "대" : "", "차종(" + shop.cars.map(function (c) { return c[1].replace(/\((\d+인승)\)/, " $1"); }).join(" / ") + ")");
+        A("이용 시간", x.hrs ? x.hrs + "시간" : "");
+        A("요청 사항", e.note);
+        if (!rr.noPrice && rr.lines.length) A("예상 요금", rcTotalStr(rr), null, "", "ask");
+        return R;
+      }
       var rdAsk = shop.rounds && (isRounds(shop, e) || !shop.items.some(function (it) { return e.q[it.key] > 0; })); // 골프: 라운드마다 한 줄(원장 261125-70)
       if (rdAsk) {
         A(null, "", "라운드마다 한 줄씩 적어 주세요(날짜 / 골프장 / 인원 / 희망 티업 시간 — 여러 번 치시면 2라운드·3라운드 줄을 더해 주세요)", "", "ask");
@@ -405,6 +549,7 @@
     },
     after: function (shop, name, e) {
       var who = name || "고객";
+      if (shop.rent && e) return Rent.after(shop, e);
       if (shop.afterBy) return reHit(shop.afterBy.match, e && e.option) ? shop.afterBy.yes : shop.afterBy.no; // 어메이징쇼: 솔타나 투숙이면 객실 테이블, 아니면 따로 안내(감사 PB-C-18)
       if (shop.afterText) return shop.afterText;
       if (shop.after === "customer_channel") return "★ " + shop.name + " 예약이 완료되었습니다.\n아래 " + (shop.channelName || shop.name) + " 카카오톡 채널로 연락하셔서 \"" + B + "를 통해 " + eul(shop.name) + " 예약한 " + who + "\"이라고 말씀해 주세요. " + (shop.noPickup ? "이용 시간과 준비물" : "픽업 시간과 준비물") + " 등 상세 내용을 업체에서 바로 안내해 드립니다.\n" + (shop.channel || "(업체 채널 주소 확인 필요)") + (shop.meet ? "\n" + shop.meet : "");
@@ -465,6 +610,7 @@
       return "";
     },
     vendor: function (e) {
+      if (shopById(e.shopId).rent) return Rent.vendor(e); // 렌트카는 현지 업체 — 영어 한 덩어리(원장 261128-28)
       var shop = shopById(e.shopId), f = D.forms[shop.form], r = Calc.entry(e);
       var sc = showContact(shop);
       return f.title.replace("{shop}", shop.name) + "\n" + f.lines.filter(function (l) { return (sc || (l[1] !== "contact" && l[1] !== "phone")) && !(shop.noPickup && /^(pickup|drop)/.test(l[1])) && !((l[1] === "ages" || l[1] === "flight") && !Text.vendorValue(l[1], e, r)); }).map(function (l) { return l[0].replace(sc ? "" : " & 연락처", "") + ": " + Text.vendorValue(l[1], e, r); }).join("\n");
@@ -1064,7 +1210,7 @@
     else state.cart.push(newEntry(id));
     save(); render();
   }
-  function minPrice(shop) { var it = shop.items.filter(function (x) { return x.sp; })[0]; return it ? priceStr(it.sp).replace("예약금 ", "").replace(/현장결제 /g, "") + "~" : "상담 안내"; }
+  function minPrice(shop) { if (shop.minLabel) return shop.minLabel; var it = shop.items.filter(function (x) { return x.sp; })[0]; return it ? priceStr(it.sp).replace("예약금 ", "").replace(/현장결제 /g, "") + "~" : "상담 안내"; }
   function chips(list, cur, attr) { return '<div class="chips">' + list.map(function (c) { return '<button class="chip' + (c === cur ? " on" : "") + '" data-' + attr + '="' + esc(c) + '">' + esc(c) + "</button>"; }).join("") + "</div>"; }
 
   /* 마사지 7곳 비교표(아이디어 ⑥, 원장 261125-74) — 수익 칸은 로그인 뒤 내부 자료(S.massageProfit)가 열렸을 때만 */
@@ -1128,7 +1274,7 @@
       '<div class="card" style="margin-top:10px"><div class="row"><h2 class="grow">요금</h2>' + (PRIV.ok ? '<button class="btn sm ' + (nv ? "" : "ghost") + '" id="toggleNet">' + (nv ? "넷가 숨기기" : "넷가 보기") + "</button>" : '<span class="note">🔒 넷가는 로그인 후</span>') + '</div><div class="scroll"><table><tr><th>구분</th><th>공식 요금</th><th>' + B + " 스페셜</th>" + (nv ? "<th>넷가(내부)</th><th>1인 수익</th>" : "") + "</tr>" + rows + "</table></div>" +
       (nv ? '<p class="warn">넷가·수익은 이 화면에서만 보이고, 복사되는 글에는 들어가지 않습니다.</p>' : "") +
       (s.refund ? '<p class="note">환불: ' + esc(s.refund) + "</p>" : "") + (s.memo ? '<p class="note">메모(내부용): ' + esc(s.memo) + "</p>" : "") + "</div>" +
-      '<div class="card" style="margin-top:10px"><h2>손님께 바로 보내기</h2>' + (s.oneBox ? outBox("intro_" + s.id, s.oneBox, Text.intro(s)) : outBox("intro_" + s.id, "업체 소개 + 상세 글 링크", Text.intro(s)) + outBox("price_" + s.id, "요금 안내(공식 요금 / " + B + " 스페셜)", Text.price(s))) + "</div>"; // '예약 완료 후 안내' 칸은 뺌 — 견적 작성 ③ 입금 확인·완료 글로 보낸다(원장 261127-97)
+      '<div class="card" style="margin-top:10px"><h2>손님께 바로 보내기</h2>' + (s.oneBox ? outBox("intro_" + s.id, s.oneBox, Text.intro(s)) : outBox("intro_" + s.id, "업체 소개 + 상세 글 링크", Text.intro(s)) + outBox("price_" + s.id, s.rent ? "요금 안내" : "요금 안내(공식 요금 / " + B + " 스페셜)", Text.price(s))) + "</div>"; // '예약 완료 후 안내' 칸은 뺌 — 견적 작성 ③ 입금 확인·완료 글로 보낸다(원장 261127-97)
   }
   function field(e, i, key, label, type, opts) {
     var v = esc(e[key] || ""), at = 'data-e="' + i + '" data-k="' + key + '"', dk = ' data-key="f_' + e.shopId + "_" + key + '"';
@@ -1141,6 +1287,29 @@
     var any = s.items.some(function (it) { return e.q[it.key] > 0; }), qn = []; for (var n = 1; n <= 20; n++) qn.push(n);
     return '<label>메뉴 고르기 → 수량 → [추가]</label><div class="pick"><select id="msel' + i + '">' + s.items.map(function (it) { return '<option value="' + it.key + '">' + esc(it.label + " · " + priceStr(it.sp).replace("예약금 ", "").replace(/현장결제 /g, "")) + "</option>"; }).join("") + '</select><select id="mqty' + i + '">' + qn.map(function (n) { return '<option value="' + n + '">' + n + "</option>"; }).join("") + '</select><button class="btn sm gold" data-madd="' + i + '">추가</button></div>' +
       (any ? '<p class="note" style="margin:8px 0 2px">고른 메뉴 (수량을 0으로 바꾸면 빠집니다)</p>' : '<p class="note" style="margin:8px 0 0">아직 고른 메뉴가 없습니다.</p>');
+  }
+  /* 렌트카 견적 칸(원장 261128-28) — 정해진 일정을 넣는다. 선택 칸 '자동'은 출발~도착 시각·장소 낱말로 앱이 정한다 */
+  function rentCard(s, e, i, r) {
+    var x = r.rent, nn = function (a, b, u) { var o = []; for (var k = a; k <= b; k++) o.push(k + u); return o; }, info = [];
+    if (x.hrs) info.push("이용 시간 " + x.hrs + "시간" + (x.manual ? "(직접 고름)" : x.span != null ? "(출발~도착 " + spanKo(x.span) + (x.span % 60 || x.span < 120 ? " → " + x.hrs + "시간으로 계산" : "") + ")" : ""));
+    info.push("산 위 추가: " + (x.mtn.on || x.sir.on ? "있음" : "없음") + (x.mtn.on && x.mtn.auto ? "(장소에 '" + x.mtn.hit + "')" : !x.mtn.on && x.sir.on ? "(시라오에 따라)" : ""));
+    info.push("시라오 추가: " + (x.sir.on ? "있음" : "없음") + (x.sir.on && x.sir.auto ? "(장소에 '" + x.sir.hit + "')" : ""));
+    var sum = r.noPrice ? (s.quoteNote || "") : x.guest ? "손님이 이용 당일 기사님께 직접 " + peso(r.sp.on) + " (넷가 그대로 · 수익 0)" : "손님 예약 시 " + usd(r.sp.pre) + " · 업체 넷가 " + peso(r.net.on) + "(사장님 지캐시 송금) · 수익 " + usd(r.profitUsd) + " − " + peso(-r.profitPhp);
+    return '<div class="card" data-key="cart_' + s.id + '" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
+      '<p class="note">★ 견적 필수: 날짜·차종·인원·출발 시각 + 도착 예정 시각(또는 이용 시간). 정해진 일정을 넣으면 ①~④ 글이 만들어집니다.</p>' +
+      '<div class="grid2">' + field(e, i, "rcPay", "업체 결제 방식 ★", "", RC_PAY) + field(e, i, "date", "이용 날짜 ★", "date") +
+      field(e, i, "rcCar", "차종 ★", "", s.cars.map(function (c) { return c[1]; })) + field(e, i, "rcCars", "대수", "", nn(1, 4, "대")) +
+      field(e, i, "rcAdults", "성인 ★", "", nn(1, 30, "명")) + field(e, i, "rcKids", "아동", "", nn(0, 20, "명")) +
+      field(e, i, "time", "출발 시각 ★ (예: 12:00)") + field(e, i, "pickup", "출발 장소") +
+      field(e, i, "rcArrive", "도착 예정 시각 (예: 21:00)") + field(e, i, "drop", "도착 장소") +
+      field(e, i, "rcHours", "이용 시간", "", [RC_HAUTO].concat(nn(2, 16, "시간"))) + field(e, i, "luggage", "짐(캐리어)", "", ["있음", "없음"]) +
+      field(e, i, "rcMtn", "산 위(탑스·레아 신전 등)", "", [RC_AUTO, "감", "안 감"]) + field(e, i, "rcSirao", "시라오가든", "", [RC_AUTO, "감", "안 감"]) + "</div>" +
+      '<div style="margin-top:10px">' + field(e, i, "rcStops", "들를 곳 (순서대로, 쉼표로 — 예: 시라오가든, 아얄라몰, 파크몰)") + "</div>" +
+      '<div style="margin-top:10px"><label>특이사항(손님 글에 들어감)</label><textarea data-e="' + i + '" data-k="note" style="min-height:60px">' + esc(e.note) + "</textarea></div>" +
+      '<div style="margin-top:10px">' + field(e, i, "rcEn", "업체에 보낼 영어 메모(선택 — ④ 업체 전달폼 끝에 그대로 붙음)") + "</div>" +
+      '<div data-key="rules_' + s.id + '">' + (r.warns || []).map(function (w) { return '<p class="warn' + (w.hard ? " big" : "") + '">' + (w.hard ? "🚨 " : "⚠ ") + esc(w.t) + "</p>"; }).join("") + "</div>" +
+      '<p class="note" style="margin:8px 0 0">' + esc(info.join(" · ")) + "</p>" +
+      '<p class="note" style="margin:4px 0 0"><b>' + esc(sum) + "</b></p></div>";
   }
   /* 골프 라운드 칸: data-rd="견적번호.라운드번호.칸" (원장 261125-70) */
   function setRd(path, v) { var p = path.split("."), e = state.cart[+p[0]]; if (!e || !e.rounds || !e.rounds[+p[1]]) return; e.rounds[+p[1]][p[2]] = v; e.date = entryDates(e)[0] || ""; }
@@ -1168,6 +1337,7 @@
       '<details style="margin-top:10px"><summary class="note">손님이 채워 보낸 내용 붙여넣기</summary><textarea id="paste" placeholder="손님이 보낸 글을 그대로 붙여넣고 [내용 읽기]를 누르세요"></textarea><div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn sm" id="doParse">내용 읽기</button><button class="btn sm gold" id="doAi">AI로 읽기(자유롭게 쓴 글)</button></div><p class="note" id="aiMsg" style="margin:6px 0 0">[내용 읽기]는 양식대로 채운 글을 바로 읽습니다(무료). [AI로 읽기]는 양식 없이 쓴 글도 읽지만 로그인이 필요하고 건당 소액의 AI 사용료가 듭니다.</p></details></div>';
     state.cart.forEach(function (e, i) {
       var s = shopById(e.shopId), r = c.rows[i], mas = s.cat === "마사지", pt = pickupTimeShop(s), noAge = (mas && !kidIn(s, e)) || s.noAges; // 마사지도 아동 코스를 담으면 나이 칸(감사 PB-B-20)
+      if (s.rent) { h += rentCard(s, e, i, r); return; } // 렌트카 전용 칸(원장 261128-28)
       h += '<div class="card" data-key="cart_' + s.id + '" style="margin-top:10px"><div class="row"><div class="grow"><div class="cat">' + s.cat + "</div><h2>" + esc(s.name) + '</h2></div><button class="btn sm danger" data-cart="' + s.id + '">빼기</button></div>' +
         '<p class="note">★ 견적 필수: 날짜·인원' + (mas ? "·코스" : "") + ". 나머지는 예약 확정 때 채워도 됩니다.</p>" +
         (isRounds(s, e) ? roundsBox(s, e, i, r) :
